@@ -1,0 +1,57 @@
+{
+    "metrics": {
+            "append_dimensions": {
+                    "ImageId": "${aws:ImageId}",
+                    "InstanceId": "${aws:InstanceId}"
+            },
+            "metrics_collected": {
+                    "disk": {
+                            "measurement": [
+                                    "used_percent",
+                                    "used",
+                                    "free",
+                                    "total"
+                            ],
+                            "metrics_collection_interval": 300,
+                            "resources": [
+                                    "/",
+                                    "/tmp",
+                                    "/usr",
+                                    "/var",
+                                    "/opt/Tanium",
+                                    "/apps"
+                            ]
+                    },
+                    "mem": {
+                            "measurement": [
+                                    "mem_used_percent"
+                            ],
+                            "metrics_collection_interval": 300
+                    },
+                    "swap": {
+                            "measurement": [
+                                    "swap_used_percent"
+                            ],
+                            "metrics_collection_interval": 300
+                    },
+                    "logs": {
+                        "logs_collected": {
+                            "files": {
+                                "collect_list": [
+                                    {
+                                        "file_path":"/apps/talend/Talend7.1.1/jobserver/agent/service_errors_talend.log",
+                                        "log_group_name": "2env-ta326-platform-njs-servicelog-cwlg",
+                                        "log_stream_name": "{instance_id}"
+                                    },
+                                    {
+                                        "file_path":"/apps/etldata/talend_artifacts/adobedatahub/logs/incremental/load_summary.log",
+                                        "log_group_name": "2env-ta326-cs-adobejobs-cwlg",
+                                        "log_stream_name": "{instance_id}"   
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+    }
+}

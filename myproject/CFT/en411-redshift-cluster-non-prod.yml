@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Conditions:
+  SingleNode: !Equals [ !Ref RedshiftNodeCount, 1 ]
+Mappings:
+  AccountIDMap:
+    '707512021127':
+      VPCShortName: Core
+    '359300531472':
+      VPCShortName: CoreTest
+    '889535458826':
+      VPCShortName: CoreDR
+    '434940588922':
+      VPCShortName: EnterpriseProd
+    '129801215131':
+      VPCShortName: EnterpriseQA
+      AcctShortName: EnQA
+      VPCId: vpc-0ec63a8e46bdc0b21
+    '288355943657':
+      VPCShortName: EnterpriseDev
+      AcctShortName: EnNonprod
+      VPCId: vpc-97847dec
+    '524246855650':
+      VPCShortName: EnterpriseSandbox
+    '120380718976':
+      VPCShortName: NEERProd
+    '926173705195':
+      VPCShortName: NEERQA
+    '733125211443':
+      VPCShortName: NEERDev
+    '484902404805':
+      VPCShortName: NEERSandbox
+    '678078281154':
+      VPCShortName: NEERTest
+    '430004966399':
+      VPCShortName: FPLProd
+    '485449107334':
+      VPCShortName: FPLQA
+    '977465404123':
+      VPCShortName: FPLDev
+    '237980099910':
+      VPCShortName: FPLSandbox
+      AcctShortName: FS
+      VPCId: vpc-bd376ac4
+    '688642023437':
+      VPCShortName: SecurityProd
+    '343234139589':
+      VPCShortName: SecurityTest
+    '480804328775':
+      VPCShortName: Isolation
+    '914606261750':
+      VPCShortName: NEERDR
+    '202055847252':
+      VPCShortName: FPLDR
+    '516627182506':
+      VPCShortName: FPLTest
+    '719322411134':
+      VPCShortName: GulfPowerDev
+    '546978450329':
+      VPCShortName: GulfPowerTest
+    '649713442868': 
+      VPCShortName: GulfPowerQA
+    '374887338695': 
+      VPCShortName: GulfPowerProd 
+  
+Parameters:
+  ClusterIdentifier:
+    Type: String
+    Description: A unique identifier for the cluster
+    ConstraintDescription: Must contain from 1 to 63 alphanumeric characters or hyphens.
+  SubnetA:
+    Type: String
+    Type: AWS::EC2::Subnet::Id
+    Description: Make sure this belongs to the VPC specified below (e.g. 172.31.0.0/20)
+  ClusterIdentifier:
+    Description: This is the unique key that identifies a cluster. This parameter is stored as a lowercase string. (e.g. my-dw-instance)
+    Type: String
+    Default: redshift-edp-dev
+  DatabaseName:
+    Description: The name of the redshift database to be created when the cluster is created
+    Type: String
+    Default: dev
+    AllowedPattern: "([a-z]|[0-9])+"
+  ClusterType:
+    Description: The type of cluster
+    Type: String
+    Default: single-node
+    AllowedValues:
+    - single-node
+    - multi-node
+  NumberOfNodes:
+    Description: The number of compute nodes in the cluster. For multi-node clusters, the NumberOfNodes parameter must be greater than 1
+    Type: Number
+    Default: '1'
+  NodeType:
+    Description: The type of node to be provisioned
+    Type: String
+    Default: ds2.xlarge
+    AllowedValues:
+    - dc2.large
+    - ds2.xlarge
+    - ds2.8xlarge
+    - dc1.large
+    - dc1.8xlarge
+  MasterUsername:
+    Description: The user name that is associated with the master user account for the cluster that is being created
+    Type: String
+    Default: awsedpuser
+    AllowedPattern: "([a-z])([a-z]|[0-9])*"
+  MasterUserPassword:
+    Description: The password that is associated with the master user account for  the cluster that is being created.
+    Type: String
+    NoEcho: 'true'
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: 'should be atleast 8 characters long and must contain only alphanumeric characters.'
+  AvailabilityZones:
+    Type: String
+    Default: us-east-1a
+    AllowedValues:
+    - us-east-1a
+    - us-east-1b
+    - us-east-1c
+  DatabasePort:
+    Description: The port number on which the cluster accepts incoming connections.
+    Type: Number
+    Default: '5439'
+  VPCID:
+    Type: String
+    Type: AWS::EC2::VPC::Id  
+  RedShiftSecurityGroup:
+    Type: "List<AWS::EC2::SecurityGroup::Id>"
+    Description: Please enter correct Security Group
+  RedshiftNodeCount:
+    Type: Number
+    Description: Number of Redshift nodes
+    Default: 1
+    MinValue: 1
+    ConstraintDescription: Must be a number greater or equal to 1
+  GroupNamePrefix:
+    Type: String
+    Description: Type a Redshift Group Security Name Prefix 
+#  KMSKeyId:
+#    Type: 'AWS::KMS::Key'
+#    Description: Enter KMS key to Encrypt the Data 
+ 
+Resources:
+  RedshiftCluster:
+    Type: AWS::Redshift::Cluster
+    Properties:
+      ClusterIdentifier: !Ref ClusterIdentifier
+      ClusterSubnetGroupName: !Ref RedshiftClusterSubnetGroup
+      AvailabilityZone: !Ref AvailabilityZones
+      ClusterType: !If [ SingleNode, single-node, multi-node ] 
+      NumberOfNodes: !If [ SingleNode, !Ref 'AWS::NoValue', !Ref RedshiftNodeCount ]
+      NodeType: !Ref NodeType
+      DBName: !Ref DatabaseName
+      MasterUsername: !Ref MasterUsername
+      MasterUserPassword: !Ref MasterUserPassword
+      PubliclyAccessible: 'false'
+      Port: !Ref DatabasePort
+      Encrypted: 'true'
+      #KmsKeyId:
+      VpcSecurityGroupIds:
+        - !Sub ${RedshiftSecurityGroup}
+  RedshiftSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupName: 
+          Fn::Join:
+            - ''
+            - - !Ref GroupNamePrefix
+              - '-'
+              - !Join ['', [!FindInMap [AccountIDMap, !Ref 'AWS::AccountId', VPCShortName] , '-' , !FindInMap [AccountIDMap, !Ref 'AWS::AccountId', AcctShortName]]]
+              - '-SG'  
+      GroupDescription: Enable JDBC port
+      SecurityGroupIngress:
+        - IpProtocol: TCP
+          FromPort: 0
+          ToPort: 18631
+          CidrIp: 10.195.0.0/32
+          Description: Ports for Control Hub REST API & UI, Admin Service , System Data Collector
+        - IpProtocol: TCP
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.195.0.0/32
+          Description: SSH Ports for Administrators
+        - IpProtocol: TCP
+          FromPort: 25
+          ToPort: 25
+          CidrIp: 10.195.0.0/32
+          Description: Ports for SMTP
+        - IpProtocol: TCP
+          FromPort: 0
+          ToPort: 18630
+          CidrIp: 10.195.0.0/32
+          Description: Ports for  Data Collector UI
+        - IpProtocol: TCP
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.195.0.0/32
+          Description: SSH Ports for Administrators
+      VpcId: !Ref VPCID
+  RedshiftClusterSubnetGroup:
+    Type: AWS::Redshift::ClusterSubnetGroup
+    Properties:
+      Description: EDP Redshift Cluster subnet group
+      SubnetIds: 
+        - !Ref SubnetA
+  #RedshiftSecurityGroup: 'RedShiftSecurityGroup'
+  #RedshiftSecurityGroup: !Ref RedShiftSecurityGroup
+  #RedshiftClusterParameterGroup:
+  #  Type: AWS::Redshift::ClusterParameterGroup
+  #  Properties:
+  #    Description: Cluster parameter group
+  #    ParameterGroupFamily: default-redshift-1.0
+  #    Parameters:
+  #    - ParameterName: enable_user_activity_logging
+  #      ParameterValue: 'true'
+Outputs:
+  RedshiftClusterEndpointAddress:
+    Description: Redshift Cluster Endpoint Address
+    Value: !GetAtt RedshiftCluster.Endpoint.Address
+  RedshiftClusterEndpoint:
+    Description: Redshift Cluster Endpoint
+    Value:
+      Fn::Join:
+        - ""
+        - - 'jdbc:redshift://'
+          - !GetAtt RedshiftCluster.Endpoint.Address
+          - ':5439/'
+          - !Sub ${DatabaseName}

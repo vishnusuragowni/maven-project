@@ -1,0 +1,181 @@
+###########################################################################################################
+# Created by: Pavan Kumar Gade
+# Date: 3/31/2021
+# Description: Template to Configure DMS Replication Instance
+###########################################################################################################
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Template to create Replication Instance in DMS"
+####################################### Metadata #############################################
+Metadata:
+  AWS::CloudFormation::Interface:
+  ### Parameter Groups ###
+    ParameterGroups:
+      -
+        Label:
+          default: "Parent Template Parameters"
+        Parameters:
+          - AllocatedStorage
+          - AvailabilityZone
+          - Environment
+          - Requestor
+          - OwnerContact
+          - KmsKeyId
+          - ReplicationInstanceClass
+          - ReplicationInstanceIdentifier
+          - VpcSecurityGroupIds
+          - AppCode
+          - Tags
+
+####################################### Mappings #############################################
+
+Mappings:
+  RegionMap:
+      us-east-1:
+        Region: V
+        RegionLower: v
+      us-east-2:
+        Region: O
+        RegionLower: o      
+        
+####################################### Parameters #############################################
+Parameters:
+#=============================================
+#              DMS Parameters
+#=============================================
+  AllocatedStorage:
+    Type: Number
+    Default: "50"
+    Description: The amount of storage (in gigabytes) to be initially allocated for the replication instance.
+    Default: 100
+  AppCode:
+    Type: String
+    MaxLength: "5"
+    Description: "Please enter your 5 digit AppCode"
+    Default: EN411
+  Purpose:
+    Type: String
+    Description: "Please specify the purpose, e.g: ssup, wam etc"
+    Default: replication instance for testing on demand feature
+  AvailabilityZone:
+    Description: Define what AvailabilityZone the DMS will be created in.
+    Type: String
+    Default: us-east-1a
+    AllowedValues:
+      - us-east-1a
+      - us-east-1b
+      - us-east-1c
+      - us-east-1d
+      - us-east-1e
+      - us-east-1f
+      - us-east-2a
+      - us-east-2b
+      - us-east-2c
+  Requestor:
+    Type: String
+    Description: Please specify email address of the requestor.
+    Default: svs0rmr@fpl.com
+  OwnerContact:
+    Type: String
+    Description: Please specify email address of the owner.
+    Default: Nelson.Castellanos@fpl.com
+  KmsKeyId:
+    Type: String
+    Description: An AWS KMS key identifier that is used to encrypt the data on the replication instance.
+    Default: arn:aws:kms:us-east-1:288355943657:key/b5823528-2d86-4cba-9196-de1de9fd6d9f
+  ReplicationInstanceClass:
+    Type: String
+    Description: The compute and memory capacity of the replication instance as specified by the replication instance class.
+    AllowedValues:
+      - dms.t2.micro
+      - dms.t2.small
+      - dms.t2.medium
+      - dms.t2.large
+      - dms.c4.large
+      - dms.c4.xlarge
+      - dms.c4.2xlarge
+      - dms.c4.4xlarge
+    Default: dms.t2.micro
+  Region:
+    Type: String
+    AllowedValues:
+      - us-east-1
+      - us-east-2
+    Default: us-east-1      
+  ReplicationInstanceIdentifier:
+    Type: String
+    Description: Only lowercase is supported so let's say what resource is creating (e.g. ri)  
+    Default: dms-env-ri-en411-ondemand7
+  ReplicationSubnetGroupIdentifier:
+    Type: String
+    Description: A subnet group to associate with the replication instance.
+    Default: replicationsubnetgroup-b7vuzgwah9qa6rhh
+  VpcSecurityGroupIds:
+    Type: CommaDelimitedList
+    Description: Specifies the VPC security group to be used with the replication instance. The VPC security group must work with the VPC containing the replication instance.
+    Default: "sg-34e00d42, sg-0d4875dbf56789cc8, sg-9be70aed, sg-0705b7eac25bf1068,sg-04b9641abd66f46b7"
+  PubliclyAccessible:
+    Type: String
+    Default: 'false'
+  AutomateShutdown:
+    Type: String
+    AllowedValues:
+      - "yes"
+      - "no"
+    Default: NO
+    Description: "This field specifies if the server needs to be automatically shut down every day."
+    Default: "no"
+  WeekendOperation:
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Default: true
+  TypeOfInstance:
+    Type: String
+    Default: GC
+    Description: 'Two digit identifier for instance usage. Default is GC (General Compute)'
+    AllowedValues:
+      - GC
+      - RD
+      - DB
+      - AP
+      - BS
+      - CS
+      - AD
+      - EM
+      - JS 
+  #################################################### Resources #######################################################    
+Resources:
+  DMSReplicationInstance:
+    Type: AWS::DMS::ReplicationInstance
+    Properties: 
+      AllocatedStorage: !Ref AllocatedStorage
+      AvailabilityZone: !Ref AvailabilityZone
+      PubliclyAccessible: !Ref PubliclyAccessible
+      KmsKeyId: !Ref KmsKeyId
+      ReplicationInstanceClass: !Ref ReplicationInstanceClass
+      ReplicationInstanceIdentifier: !Ref ReplicationInstanceIdentifier
+      ReplicationSubnetGroupIdentifier: !Ref ReplicationSubnetGroupIdentifier
+      VpcSecurityGroupIds: !Ref VpcSecurityGroupIds
+      Tags:
+        - Key: Resource
+          Value: Replication Instance for EDP-GasInfra
+        - Key: AppCode
+          Value: !Ref AppCode
+        - Key: Requestor
+          Value: !Ref Requestor
+        - Key: Owner
+          Value: !Ref OwnerContact                
+        - Key: AutomateShutdown
+          Value: !Ref AutomateShutdown
+        - Key: WeekendOperation
+          Value: !Ref WeekendOperation
+###################################### Outputs #############################################
+
+Outputs:
+  ReplicationInstanceName:
+    Value: !Ref ReplicationInstanceIdentifier
+    Description: Replication Instance Name
+
+  

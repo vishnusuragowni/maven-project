@@ -1,0 +1,72 @@
+###########################################################################################################
+# This template provisions a Launch Template for EKS Managed NodeGroups
+# Created by: Cedric El Khoury
+# Version: 1
+# Creation Date: 12/07/2020
+# Description : Provisions a Launch Template for EKS Managed NodeGroups
+###########################################################################################################
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation Template for creating a Launch Template
+
+###############################
+# CFT Mappings
+###############################
+
+Mappings:
+  EnvironmentMap:
+    'Enterprise-Non-Prod':
+      VPCShortName: 'EnterpriseDev'
+      AcctShortName: 'EN'
+      VPCId: 'vpc-97847dec'
+    'EnterpriseQA':
+      VPCShortName: 'EnterpriseQA'
+      AcctShortName: 'EQ'
+      VPCId: 'vpc-0ec63a8e46bdc0b21'
+    'EnterpriseProd':
+      VPCShortName: 'EnterpriseProd'
+      AcctShortName: 'EP'
+      VPCId: 'vpc-0405577f'
+
+###############################
+# CFT Parameters
+###############################
+
+Parameters:
+  Environment:
+    Description: 'Select the environment for which this is being deployed'
+    Type: String
+    AllowedValues:
+      - Enterprise-Non-Prod
+      - EnterpriseQA
+      - EnterpriseProd
+
+###############################
+# CFT Resources
+###############################
+
+Resources:
+  NodeLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        InstanceType: c5.2xlarge
+        UserData:
+          Fn::Base64:
+            |
+            #Proxy Config
+            runcmd:
+            - echo "export http_proxy=http://webproxyeva.fpl.com:8080" >> /etc/profile
+            - echo "export https_proxy=https://webproxyeva.fpl.com:8080" >> /etc/profile
+            - echo 'export no_proxy="169.254.169.254"' >> /etc/profile 
+        SecurityGroupIds:
+        - sg-048984add25218645
+      LaunchTemplateName: 2env-st503-eks-lt
+
+# ==============================
+# CF Template OUTPUTS
+# ==============================
+
+Outputs:
+  NodeLaunchTemplateID:
+    Description: Launch Template ID
+    Value: !Ref NodeLaunchTemplate

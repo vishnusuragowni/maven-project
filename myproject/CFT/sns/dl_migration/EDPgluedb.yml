@@ -1,0 +1,18 @@
+
+Parameters:
+  CFNDatabaseName:
+    Type: String
+    Default: dl_migration_en411
+    
+
+# Resources section defines metadata for the Data Catalog
+Resources:
+# Create an AWS Glue database
+  CFNDatabaseFlights:
+    Type: AWS::Glue::Database
+    Properties:
+      # The database is created in the Data Catalog for your account
+      CatalogId: !Ref AWS::AccountId
+      DatabaseInput:
+        Name: !Ref CFNDatabaseName	
+        Description: Mainframe Data Migration Project

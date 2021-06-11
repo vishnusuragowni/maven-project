@@ -1,0 +1,64 @@
+###########################################################################################################
+# 
+# This template provisions a Security Group
+# Created by: Pavan Gade
+# Version: 1
+# Creation Date: 07/21/2020
+# Description : Provisions L4 Security Group for DMS SSUP RI
+###########################################################################################################
+Mappings:
+  EnvironmentMap:
+    'Enterprise-Non-Prod':
+      VPCShortName: 'EnterpriseDev'
+      AcctShortName: 'EN'
+      VPCId: 'vpc-97847dec'
+    'EnterpriseQA':
+      VPCShortName: 'EnterpriseQA'
+      AcctShortName: 'EQ'
+      VPCId: 'vpc-0ec63a8e46bdc0b21'
+    'EnterpriseProd':
+      VPCShortName: 'EnterpriseProd'
+      AcctShortName: 'EP'
+      VPCId: 'vpc-0405577f'
+Parameters:
+  Environment:
+    Description: 'Select the environment for which this is being deployed'
+    Type: String
+    AllowedValues:
+      - Enterprise-Non-Prod
+      - EnterpriseQA
+      - EnterpriseProd
+  Purpose:
+    Type: String
+    Default: Layer 4 Security Group for DMS SSUP RI
+  GroupDescription:
+    Description: 'Enter a descriptive purpose of this security group'
+    Type: String
+Resources: 
+  EdpL4SG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupName: 
+        Fn::Join:
+          - ''
+          - - 'L4-EN411-DMS-RI-SSUP'
+            - !Join ['', [!FindInMap [EnvironmentMap, Ref: Environment, VPCShortName], '-' , !FindInMap [EnvironmentMap, Ref: Environment, AcctShortName]]]
+      GroupDescription: !Ref Purpose
+      SecurityGroupIngress:
+        - FromPort: 0
+          IpProtocol: tcp
+          ToPort: 65535
+          Description: TBD
+      SecurityGroupEgress:
+        - FromPort: 1433
+          IpProtocol: tcp
+          CidrIp: 10.110.37.149/32
+          ToPort: 1433
+          Description: DMS RI - SQLServer GOXSA5167.fplu.fpl.com
+      Tags:
+        - Key: 'Purpose'
+          Value: 'Layer 4 Security Group for DMS-RI-SSUP'
+        - Key: 'Name'
+          Value: 'L4-EN411-DMS-RI-SSUP'
+      VpcId: 
+        !FindInMap [ EnvironmentMap, Ref: Environment, VPCId ]

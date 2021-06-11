@@ -1,0 +1,239 @@
+#################################################################################
+# IAM Template
+# Created by: Cedric El Khoury
+# Date: 10/29/2020
+# Jira:
+##################################################################################
+AWSTemplateFormatVersion: 2010-09-09
+Description: Amazon EKS Cluster Role
+###############################
+# CFT Parameters
+###############################
+Parameters:
+  Environment:
+    Description: 'Select the environment for which this is being deployed'
+    Type: String
+    AllowedValues:
+      - Enterprise-Non-Prod
+      - EnterpriseQA
+      - EnterpriseProd
+  AppCode:
+    Type: String
+    MaxLength: "5"
+    AllowedPattern: "^([A-Z0-9_-]){5}$"
+    Description: "Please enter your 5 digit AppCode"
+    ConstraintDescription: "Appcode field does not match the required constraints"
+    Default: ST503
+
+  AppCodeLower:
+    Type: String
+    MaxLength: '5'
+    AllowedPattern: "^([a-z0-9_-]){5}$"    
+    Description: 'The application code name cannot be of more that 5 characters e.g: en411'
+    ConstraintDescription: "Appcode field does not match the required constraints"   
+    Default: st503
+
+  Requestor:
+    Type: String
+    Description: Please specify email address of the requestor
+    AllowedPattern: ^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$
+    ConstraintDescription: Requestor field must be an email address
+    Default: Cedric.Elkhoury@fpl.com
+    
+  OwnerContact:
+    Type: String
+    Description: Please specify email address of the owner
+    AllowedPattern: ^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$
+    ConstraintDescription: Requestor field must be an email address
+    Default: Nelson.Castellanos@fpl.com   
+
+  UserContact:
+    Type: String
+    Description: Please specify email address of the usercontact
+    AllowedPattern: ^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$
+    ConstraintDescription: Requestor field must be an email address   
+
+  Purpose:
+    Type: String
+    Description: Please specify the purpose
+    Default: Amazon EKS cluster role
+
+  Project:
+    Type: String
+    Description: Please specify the Project
+    Default: Starburst
+
+  Environment:
+    Type: String
+    AllowedValues:
+      - Dev
+      - Test
+      - QA
+      - Prod
+      - DR
+
+  DataClassification:
+    Type: String
+    Description: Please specify the Data Classification
+    Default: TBD 
+
+  ITArea:
+    Type: String
+    Description: Please specify the IT Area
+    Default: NELSON CASTELLANOS-305-552-3533-NXC0GLT
+
+  SupportContact:
+    Type: String
+    Description: Please specify the Support Contact
+    Default: NELSON CASTELLANOS-305-552-3533-NXC0GLT
+
+  SupportGroup:
+    Type: String
+    Description: Please specify the Support Group
+    Default: IT-EDP-PLATFORM 
+
+###############################
+# CFT Mappings
+###############################
+
+Mappings:
+  RegionMap:
+      us-east-1:
+        Region: V
+        RegionLower: v
+      us-east-2:
+        Region: O
+        RegionLower: o  
+
+###############################
+# CFT Resources
+###############################
+
+Resources:
+
+  eksClusterRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - eks.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
+      RoleName: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, IT, eks-cluster, role ]]
+      Tags:
+        - Key: AppCode
+          Value: !Ref AppCode
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: DataClassification
+          Value: !Ref DataClassification
+        - Key: ITArea
+          Value: !Ref ITArea
+        - Key: SupportContact
+          Value: !Ref SupportContact
+        - Key: SupportGroup
+          Value: !Ref SupportGroup
+        - Key: IamRoleName
+          Value: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, IT, eks-cluster, role ]]                 
+        - Key: IamRoleBU
+          Value: NotApplicable
+        - Key: Purpose
+          Value: !Ref Purpose
+        - Key: CloudformationStackName
+          Value: !Sub "${AWS::StackName}"
+        - Key: UserContact
+          Value: !Ref UserContact
+        - Key: ADGroup
+          Value: NotApplicable
+        - Key: PolicyAttached1
+          Value: 'AmazonEKSClusterPolicy'
+        - Key: PolicyAttached2
+          Value: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-cluster-policy-deny-rules ]]
+        - Key: PolicyAttached3
+          Value: NotApplicable
+        - Key: PolicyAttached4
+          Value: NotApplicable
+        - Key: PolicyAttached5
+          Value: NotApplicable
+        - Key: PolicyAttached6
+          Value: NotApplicable
+        - Key: PolicyAttached7
+          Value: NotApplicable
+        - Key: PolicyAttached8
+          Value: NotApplicable
+        - Key: PolicyAttached9
+          Value: NotApplicable
+        - Key: PolicyAttached10
+          Value: NotApplicable  
+
+################################# Inline Policy for Cluster IAM Role to deny permissions #####################################  
+  DenyPolicy: 
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-cluster-policy-deny-rules ]]  
+      Roles:
+        - Ref: "eksClusterRole"         
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:                
+           
+          - Effect: Deny
+            Action:
+              -  'ec2:AcceptVpc*'
+              -  'ec2:AssociateVpcCidrBlock'
+              -  'ec2:AttachVpnGateway'
+              -  'ec2:CreateCustomerGateway'
+              -  'ec2:CreateDefaultSubnet'
+              -  'ec2:CreateDefaultVpc'
+              -  'ec2:CreateDhcpOptions'
+              -  'ec2:CreateEgressOnlyInternetGateway'
+              -  'ec2:CreateFlowLogs'
+              -  'ec2:CreateInternetGateway'
+              -  'ec2:CreateNatGateway'
+              -  'ec2:CreateNetworkAcl*'
+              -  'ec2:CreateRoute*'
+              -  'ec2:CreateSubnet'
+              -  'ec2:CreateVpc*'
+              -  'ec2:CreateVpn*'
+              -  'ec2:DeleteCustomerGateway'
+              -  'ec2:DeleteDhcpOptions'
+              -  'ec2:DeleteEgressOnlyInternetGateway'
+              -  'ec2:DeleteFlowLogs'
+              -  'ec2:DeleteInternetGateway'
+              -  'ec2:DeleteNetworkAcl*'
+              -  'ec2:DeleteRoute*'
+              -  'ec2:DeleteSubnet'
+              -  'ec2:DeleteVpc*'
+              -  'ec2:DeleteVpn*'
+              -  'ec2:DetachClassicLinkVpc'
+              -  'ec2:DetachInternetGateway'
+              -  'ec2:DetachVpnGateway'
+              -  'ec2:DisableVgwRoutePropagation'
+              -  'ec2:DisableVpc*'
+              -  'ec2:DisassociateRouteTable'
+              -  'ec2:DisassociateSubnetCidrBlock'
+              -  'ec2:DisassociateVpcCidrBlock'
+              -  'ec2:EnableVgwRoutePropagation'
+              -  'ec2:EnableVpc*'
+              -  'ec2:ModifyVpc*'
+              -  'ec2:RejectVpcEndpointConnections'
+              -  'ec2:RejectVpcPeeringConnection'
+              -  'ec2:ReplaceNetworkAcl*'
+              -  'ec2:ReplaceRoute*'
+            Resource:         
+              -  '*'  
+# ==============================
+# CF Template OUTPUTS
+# ==============================
+
+Outputs:
+  
+  RoleArn:
+    Description: The role that Amazon EKS will use to create AWS resources for Kubernetes clusters
+    Value: !GetAtt eksClusterRole.Arn

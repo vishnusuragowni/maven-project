@@ -1,0 +1,436 @@
+#################################################################################
+# IAM Template to create Role for the EC2 workstation used to manage EKS cluster
+# Created by: Cedric El Khoury
+# Date: 11/23/2020
+# Jira:
+##################################################################################
+AWSTemplateFormatVersion: 2010-09-09
+Description: Amazon EKS Workstation EC2 role
+###############################
+# CFT Parameters
+###############################
+Parameters:
+  Environment:
+    Description: 'Select the environment for which this is being deployed'
+    Type: String
+    AllowedValues:
+      - Enterprise-Non-Prod
+      - EnterpriseQA
+      - EnterpriseProd
+  AppCode:
+    Type: String
+    MaxLength: "5"
+    AllowedPattern: "^([A-Z0-9_-]){5}$"
+    Description: "Please enter your 5 digit AppCode"
+    ConstraintDescription: "Appcode field does not match the required constraints"
+    Default: ST503
+
+  AppCodeLower:
+    Type: String
+    MaxLength: '5'
+    AllowedPattern: "^([a-z0-9_-]){5}$"    
+    Description: 'The application code name cannot be of more that 5 characters e.g: en411'
+    ConstraintDescription: "Appcode field does not match the required constraints"   
+    Default: st503
+
+  Requestor:
+    Type: String
+    Description: Please specify email address of the requestor
+    AllowedPattern: ^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$
+    ConstraintDescription: Requestor field must be an email address
+    Default: Cedric.Elkhoury@fpl.com
+    
+  OwnerContact:
+    Type: String
+    Description: Please specify email address of the owner
+    AllowedPattern: ^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$
+    ConstraintDescription: Requestor field must be an email address
+    Default: Nelson.Castellanos@fpl.com   
+
+  UserContact:
+    Type: String
+    Description: Please specify email address of the usercontact
+    AllowedPattern: ^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$
+    ConstraintDescription: Requestor field must be an email address   
+
+  Purpose:
+    Type: String
+    Description: Please specify the purpose
+    Default: Amazon EKS cluster role
+
+  Project:
+    Type: String
+    Description: Please specify the Project
+    Default: Starburst
+
+  Environment:
+    Type: String
+    AllowedValues:
+      - Dev
+      - Test
+      - QA
+      - Prod
+      - DR
+
+  DataClassification:
+    Type: String
+    Description: Please specify the Data Classification
+    Default: TBD 
+
+  ITArea:
+    Type: String
+    Description: Please specify the IT Area
+    Default: NELSON CASTELLANOS-305-552-3533-NXC0GLT
+
+  SupportContact:
+    Type: String
+    Description: Please specify the Support Contact
+    Default: NELSON CASTELLANOS-305-552-3533-NXC0GLT
+
+  SupportGroup:
+    Type: String
+    Description: Please specify the Support Group
+    Default: IT-EDP-PLATFORM 
+
+###############################
+# CFT Mappings
+###############################
+
+Mappings:
+  RegionMap:
+      us-east-1:
+        Region: V
+        RegionLower: v
+      us-east-2:
+        Region: O
+        RegionLower: o  
+
+###############################
+# CFT Resources
+###############################
+
+Resources:
+
+  EKSEC2Profile:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      RoleName: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-ec2-profile ]]
+      Tags:
+        - Key: AppCode
+          Value: !Ref AppCode
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: DataClassification
+          Value: !Ref DataClassification
+        - Key: ITArea
+          Value: !Ref ITArea
+        - Key: SupportContact
+          Value: !Ref SupportContact
+        - Key: SupportGroup
+          Value: !Ref SupportGroup
+        - Key: IamRoleName
+          Value: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-ec2-profile ]]                 
+        - Key: IamRoleBU
+          Value: NotApplicable
+        - Key: Purpose
+          Value: !Ref Purpose
+        - Key: CloudformationStackName
+          Value: !Sub "${AWS::StackName}"
+        - Key: UserContact
+          Value: !Ref UserContact
+        - Key: ADGroup
+          Value: NotApplicable
+        - Key: PolicyAttached1
+          Value: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-nodegroups-ec2-policy ]]
+        - Key: PolicyAttached2
+          Value: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-nodegroups-cf-policy ]]
+        - Key: PolicyAttached3
+          Value: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-nodegroups-eks-policy ]]
+        - Key: PolicyAttached4
+          Value: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-nodegroups-iam-policy ]]
+        - Key: PolicyAttached5
+          Value: NotApplicable
+        - Key: PolicyAttached6
+          Value: NotApplicable
+        - Key: PolicyAttached7
+          Value: NotApplicable
+        - Key: PolicyAttached8
+          Value: NotApplicable
+        - Key: PolicyAttached9
+          Value: NotApplicable
+        - Key: PolicyAttached10
+          Value: NotApplicable  
+
+  EksInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    DependsOn:
+      - EKSEC2Profile
+    Properties:
+      Path: "/"
+      InstanceProfileName: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-ec2-profile ]] 
+      Roles:
+      - Ref: "EKSEC2Profile"
+
+################################# EC2 Inline Policy for Workstation IAM Role #####################################  
+  Policy1: 
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-nodegroups-ec2-policy ]]  
+      Roles:
+        - Ref: "EKSEC2Profile"         
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:                
+           
+          - Effect: Allow 
+            Action:
+              -  'ec2:*'  
+            Resource:         
+              -  '*' 
+
+          - Effect: Deny
+            Action:
+              -  'ec2:AcceptVpc*'
+              -  'ec2:AssociateVpcCidrBlock'
+              -  'ec2:AttachVpnGateway'
+              -  'ec2:CreateCustomerGateway'
+              -  'ec2:CreateDefaultSubnet'
+              -  'ec2:CreateDefaultVpc'
+              -  'ec2:CreateDhcpOptions'
+              -  'ec2:CreateEgressOnlyInternetGateway'
+              -  'ec2:CreateFlowLogs'
+              -  'ec2:CreateInternetGateway'
+              -  'ec2:CreateNatGateway'
+              -  'ec2:CreateNetworkAcl*'
+              -  'ec2:CreateRoute*'
+              -  'ec2:CreateSubnet'
+              -  'ec2:CreateVpc*'
+              -  'ec2:CreateVpn*'
+              -  'ec2:DeleteCustomerGateway'
+              -  'ec2:DeleteDhcpOptions'
+              -  'ec2:DeleteEgressOnlyInternetGateway'
+              -  'ec2:DeleteFlowLogs'
+              -  'ec2:DeleteInternetGateway'
+              -  'ec2:DeleteNetworkAcl*'
+              -  'ec2:DeleteRoute*'
+              -  'ec2:DeleteSubnet'
+              -  'ec2:DeleteVpc*'
+              -  'ec2:DeleteVpn*'
+              -  'ec2:DetachClassicLinkVpc'
+              -  'ec2:DetachInternetGateway'
+              -  'ec2:DetachVpnGateway'
+              -  'ec2:DisableVgwRoutePropagation'
+              -  'ec2:DisableVpc*'
+              -  'ec2:DisassociateRouteTable'
+              -  'ec2:DisassociateSubnetCidrBlock'
+              -  'ec2:DisassociateVpcCidrBlock'
+              -  'ec2:EnableVgwRoutePropagation'
+              -  'ec2:EnableVpc*'
+              -  'ec2:ModifyVpc*'
+              -  'ec2:RejectVpcEndpointConnections'
+              -  'ec2:RejectVpcPeeringConnection'
+              -  'ec2:ReplaceNetworkAcl*'
+              -  'ec2:ReplaceRoute*'
+            Resource:         
+              -  '*'
+
+          - Effect: Allow 
+            Action:
+              -  'elasticloadbalancing:*'  
+            Resource:         
+              -  '*'   
+
+          - Effect: Allow 
+            Action:
+              -  'cloudwatch:*'  
+            Resource:         
+              -  !Sub 'arn:aws:cloudwatch:us-east-1:${AWS::AccountId}:alarm:*ST503*'
+              -  !Sub 'arn:aws:cloudwatch:us-east-1:${AWS::AccountId}:alarm:*st503*'
+              -  !Sub 'arn:aws:cloudwatch:us-east-1:${AWS::AccountId}:dashboard:*ST503*'
+              -  !Sub 'arn:aws:cloudwatch:us-east-1:${AWS::AccountId}:dashboard:*st503*'
+
+          - Effect: Allow 
+            Action:
+              -  'cloudwatch:Describe*'
+              -  'cloudwatch:Get*'
+              -  'cloudwatch:List*' 
+            Resource:         
+              -  '*' 
+
+          - Effect: Allow 
+            Action:
+              -  'autoscaling:*'  
+            Resource:         
+              -  '*'                
+
+          - Action:
+              -  'iam:CreateServiceLinkedRole'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: 
+                  - autoscaling.amazonaws.com
+                  - ec2scheduled.amazonaws.com
+                  - elasticloadbalancing.amazonaws.com
+                  - spot.amazonaws.com
+                  - spotfleet.amazonaws.com
+                  - transitgateway.amazonaws.com
+            Effect: Allow   
+
+################################# CloudFormation Inline Policy for Workstation IAM Role #####################################  
+  Policy2: 
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-nodegroups-cf-policy ]]  
+      Roles:
+        - Ref: "EKSEC2Profile"         
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:                
+          - Effect: Allow 
+            Action:
+              -  'cloudformation:*'  
+            Resource:         
+              -  !Sub 'arn:aws:cloudformation:us-east-1:${AWS::AccountId}:stack/*ST503*'
+              -  !Sub 'arn:aws:cloudformation:us-east-1:${AWS::AccountId}:stack/*st503*'
+              -  !Sub 'arn:aws:cloudformation:us-east-1:${AWS::AccountId}:stackset/*ST503*'
+              -  !Sub 'arn:aws:cloudformation:us-east-1:${AWS::AccountId}:stackset/*st503*'
+
+          - Effect: Allow 
+            Action:
+              -  'cloudformation:Describe*'
+              -  'cloudformation:EstimateTemplateCost'
+              -  'cloudformation:Get*'
+              -  'cloudformation:List*'
+              -  'cloudformation:ValidateTemplate'
+              -  'cloudformation:Detect*'
+            Resource:         
+              -  '*' 
+
+################################# EKS Inline Policy for Workstation IAM Role #####################################  
+  Policy3: 
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-nodegroups-eks-policy ]]  
+      Roles:
+        - Ref: "EKSEC2Profile"         
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:                
+          - Sid: RestrictedOnConditionBased
+            Effect: Allow
+            Action:
+              - 'eks:CreateCluster'
+            Resource: '*'
+            Condition:
+              StringEqualsIgnoreCase:
+                aws:RequestTag/AppCode: 
+                  - !Sub ${AppCode}
+                  - !Sub ${AppCodeLower}
+
+          - Sid: RestrictedOnResourceBased
+            Effect: Allow
+            Action:
+            - 'eks:Create*'
+            - 'eks:Delete*'
+            - 'eks:Update*'
+            - 'eks:TagResource'
+            - 'eks:UntagResource'
+            Resource: 
+              - !Sub  arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/*${AppCode}*
+              - !Sub  arn:aws:eks:${AWS::Region}:${AWS::AccountId}:nodegroup/*${AppCode}*/*/*
+              - !Sub  arn:aws:eks:${AWS::Region}:${AWS::AccountId}:fargateprofile/*${AppCode}*/*/*
+              - !Sub  arn:aws:eks:${AWS::Region}:${AWS::AccountId}:cluster/*${AppCodeLower}*
+              - !Sub  arn:aws:eks:${AWS::Region}:${AWS::AccountId}:nodegroup/*${AppCodeLower}*/*/*
+              - !Sub  arn:aws:eks:${AWS::Region}:${AWS::AccountId}:fargateprofile/*${AppCodeLower}*/*/*              
+
+          - Sid: EKSReadOnly
+            Effect: Allow
+            Action:              
+              - 'eks:Describe*'
+              - 'eks:List*'
+            Resource: '*'  
+
+          - Effect: Allow 
+            Action:
+              -  'ecr:*'
+            Resource:         
+              -  !Sub 'arn:aws:ecr:us-east-1:${AWS::AccountId}:repository/*st503*'
+              
+          - Effect: Allow 
+            Action:
+              -  'ecr:GetAuthorizationToken'
+            Resource:         
+              -  '*'
+
+          - Effect: Allow 
+            Action:
+              -  'ssm:GetParameter'
+              -  'ssm:GetParameters'
+            Resource:         
+              -  !Sub 'arn:aws:ssm:us-east-1:${AWS::AccountId}:parameter/evolution/*'
+              -  !Sub 'arn:aws:ssm:us-east-1:${AWS::AccountId}:parameter/account/*'
+              -  !Sub 'arn:aws:ssm:us-east-1:${AWS::AccountId}:parameter/*ST503*'
+              -  !Sub 'arn:aws:ssm:us-east-1:${AWS::AccountId}:parameter/*st503*'
+
+          - Effect: Allow 
+            Action:
+              -  'kms:CreateGrant'
+              -  'kms:DescribeKey'
+            Resource:         
+              -  '*'
+
+################################# IAM Access Inline Policy for Workstation IAM Role #####################################  
+  Policy4: 
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCodeLower, !FindInMap [RegionMap, !Ref "AWS::Region", RegionLower]]], !Ref AppCodeLower, eks-nodegroups-iam-policy ]]  
+      Roles:
+        - Ref: "EKSEC2Profile"         
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:                
+
+          - Effect: Allow 
+            Action:
+              -  'iam:PassRole'
+              -  'iam:Get*'
+              -  'iam:List*'
+              -  'iam:TagRole'
+            Resource:         
+              -  '*' 
+
+          - Effect: Allow 
+            Action:
+              -  'iam:GetRole'  
+            Resource:         
+              -  !Sub 'arn:aws:iam::${AWS::AccountId}:role/*'   
+
+          - Action:
+              - 'iam:CreateServiceLinkedRole'
+            Resource: '*'
+            Condition:
+              StringEquals:
+                iam:AWSServiceName: 
+                  - eks.amazonaws.com
+                  - eks-nodegroup.amazonaws.com
+                  - eks-fargate.amazonaws.com
+            Effect: Allow
+# ==============================
+# CF Template OUTPUTS
+# ==============================
+
+Outputs:
+  
+  RoleArn:
+    Description: The role that Amazon EKS will use to create AWS resources for Kubernetes clusters
+    Value: !GetAtt EKSEC2Profile.Arn

@@ -1,0 +1,145 @@
+####################################################################################
+# This template provisions cloudwatch alarms
+# Created by: Sree Vishnu Suragowni
+# Date: 12/22/2020
+# Description : provisions alarms for dms
+#
+####################################################################################
+
+# ==============================
+# Define CF Template
+# ==============================
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: "Template provisions cloudwatch alarms"
+
+Parameters:
+  Requestor:
+    Type: String
+    Description: Please specify email address of the requestor
+    AllowedPattern: '^([a-zA-Z0-9_\-\.]+)@([a-zA-Z0-9_\-\.]+)\.([a-zA-Z]{2,5})$'
+    ConstraintDescription: Requestor field must be an email address
+    Default: svs0rmr@fpl.com
+  DMSReplicationInstance:
+    Description: Please provide the name of EC2 this alarm is being created for
+    Type: String
+  EmailAddress1: 
+    Description: Please provide the Email Name or Distribution list Name
+    Type: String
+    AllowedValues:
+      - DL-EDP-PLATFORM
+      - DL-EDP-ACCELERATORS
+    Default: DL-EDP-PLATFORM
+  Purpose:
+    Type: String
+    Description: please provide detailed purpose of the instance
+    Default: Cloudwatch Alarms for dms-epv-ri-en411-adobe Free Storage Space
+
+Mappings:
+  AccountIDMap:
+    '707512021127':
+      VPCShortName: Core
+    '359300531472':
+      VPCShortName: CoreTest
+    '889535458826':
+      VPCShortName: CoreDR
+    '434940588922':
+      VPCShortName: EnterpriseProd
+    '129801215131':
+      VPCShortName: EnterprisePROD
+    '288355943657':
+      VPCShortName: EnterpriseDev
+    '524246855650':
+      VPCShortName: EnterpriseSandbox
+    '120380718976':
+      VPCShortName: NEERProd
+    '926173705195':
+      VPCShortName: NEERPROD
+    '733125211443':
+      VPCShortName: NEERDev
+    '484902404805':
+      VPCShortName: NEERSandbox
+    '678078281154':
+      VPCShortName: NEERTest
+    '430004966399':
+      VPCShortName: FPLProd
+    '485449107334':
+      VPCShortName: FPLPROD
+    '977465404123':
+      VPCShortName: FPLDev
+    '237980099910':
+      VPCShortName: FPLSandbox
+    '688642023437':
+      VPCShortName: SecurityProd
+    '343234139589':
+      VPCShortName: SecurityTest
+    '480804328775':
+      VPCShortName: Isolation
+    '914606261750':
+      VPCShortName: NEERDR
+    '202055847252':
+      VPCShortName: FPLDR
+    '516627182506':
+      VPCShortName: FPLTest
+    '719322411134':
+      VPCShortName: GulfPowerDev
+    '546978450329':
+      VPCShortName: GulfPowerTest
+    '649713442868': 
+      VPCShortName: GulfPowerPROD
+    '374887338695': 
+      VPCShortName: GulfPowerProd
+  
+
+
+Resources:
+  FreeStorageSpace:
+    Type: "AWS::CloudWatch::Alarm"
+    Properties:
+      Namespace: AWS/DMS
+      AlarmActions: ["arn:aws:sns:us-east-1:434940588922:NE789-IncidentTicketProd"]
+      AlarmDescription:
+        Fn::Join:
+          - ""
+          - - "App="
+            - "EDP"
+            - " "
+            - "arsRequired="
+            - "1"
+            - " "
+            - "arsSeverity="
+            - "SEV5"
+            - " "
+            - "arsAutoTag="
+            - "EDP_PLATFORM_TEAM"
+            - " "
+            - "emailRequired="
+            - "1"
+            - " "
+            - "emailSubject="
+            - "StorageSpaceFull"
+            - " "
+            - "emailAddress="
+            - Ref: EmailAddress1
+            
+      AlarmName:
+        Fn::Join:
+          - "_"
+          - - "ITEDP_CW_FreeStorageSpace"
+            - Ref: DMSReplicationInstance
+            - "PROD"
+            - "SEV5"
+      ComparisonOperator: "GreaterThanOrEqualToThreshold"
+      Dimensions:
+        - Name: ReplicationInstanceIdentifier
+          Value:
+            Ref: DMSReplicationInstance
+        
+      MetricName: "FreeStorageSpace"
+      Namespace: "AWS/DMS"
+      Period: 300
+      EvaluationPeriods: 1
+      Statistic: "Average"
+      Threshold: 20
+      TreatMissingData: "missing"
+      

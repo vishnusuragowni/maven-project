@@ -1,0 +1,662 @@
+###########################################################################################
+# AWS CloudFormation Template that provision Amazon Linux2 EC2 instance for Energy Analyzer (NEECode:PO164)
+# Base template created by CAEE team
+# Base template creation date: 05/23/2018
+# Last modified by : Soni Mirani`
+# Last modified date: 18-Sep-2020
+# Jira Ticket: https://jira.nexteraenergy.com/browse/CLOUDSD-5740
+############################################################################################
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation Template that provision  Amazon Linux2 EC2 instance for Energy Analyzer (NEECode:PO164)
+
+####################################### Parameters ##########################################
+
+Parameters:
+
+  AppCode:
+    Type: String
+    Default: EN411
+    MaxLength: 5
+    AllowedPattern: ^([A-Z0-9_-]){5}$
+    Description: The application code name (NEECode) cannot be of more that 5 characters
+    ConstraintDescription: Appcode field does not match the required constraints
+
+  Environment:
+    Type: String
+    AllowedValues:
+      - Dev
+      - Test
+      - QA
+      - Prod
+      - DR
+    
+
+  InstanceType:
+    Type: String
+    Description: EC2 instance type, default is t2.micro
+    ConstraintDescription: Must be a valid EC2 instance type.
+    AllowedValues:
+      - t2.nano
+      - t2.micro
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - t3.nano
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - t3a.nano
+      - t3a.micro
+      - t3a.small
+      - t3a.medium
+      - t3a.large
+      - t3a.xlarge
+      - t3a.2xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.8xlarge
+      - c1.medium
+      - c1.xlarge
+      - c3.large
+      - c3.xlarge
+      - c3.2xlarge
+      - c3.4xlarge
+      - c3.8xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - g2.2xlarge
+      - g2.8xlarge
+      - r3.large
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - i2.xlarge
+      - i2.2xlarge
+      - i2.4xlarge
+      - i2.8xlarge
+      - d2.xlarge
+      - d2.2xlarge
+      - d2.4xlarge
+      - d2.8xlarge
+    Default: t3.medium
+
+  TypeOfInstance:
+    Type: String
+    Default: GC
+    Description: 'GC-General Compute App Server, Web Server /RD -RDS database /DB -EC2 database /AP -Appliance (firewall, loadbalancer, etc.) /BS -Beanstalk /CS -Container Service /DC-Domain Controller /EM -Elastic Map Reduce /RS -Redshift'
+    AllowedValues:
+      - GC
+      - RD
+      - DB
+      - AP
+      - BS
+      - CS
+      - AD
+      - EM
+
+  AvailabilityZone:
+    Type: String
+    AllowedValues:
+      - a
+      - b
+      - c
+    Default: a
+    Description: Please specify the Availability Zone for your instances, some env may not have c
+
+  OperatingSystem:
+    Type: String
+    AllowedValues:
+      - Linux
+    Description: Please enter the flavor of LINUX
+    Default: Linux
+  
+  Requestor:
+    Type: String
+    Description: Please specify email address of the requestor.
+  VPCShortName:
+    Type: String
+    Description: Please specify VPCShortName.
+
+  HADRTier:
+    Type: String
+    AllowedValues:
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+    Default: 5
+    Description: Please specify the DR tier for your instances
+
+  ApplicationTier:
+    Type: String
+    Description: Please, select in which subnet the servers will reside
+    AllowedValues:
+      - App
+      - DataBase
+      - Visibility
+      - White
+      - Lambda
+      - Prime
+      - DMZ
+      - Web
+    Default: Web
+
+  AutomateShutdown:
+    Type: String
+    AllowedValues:
+      - yes
+      - no
+    Description: This field specifies if the server needs to be automatically shut down every day
+    Default: no
+
+  HostNumber:
+    Type: String
+    Default: '17'
+    AllowedPattern: '^([0-9]){2}$'
+    Description: Please assigned a number for this EC2 instance between 01 and 99. Please make sure it is unique
+    ConstraintDescription: Hostnumber field has to be a 2 digit number between 01 and 99
+
+  SetTerminationProtection:
+    Type: String
+    AllowedValues:
+      - true
+      - false
+    Default: false
+
+  Requestor:
+    Type: String
+    Description: Please enter requestor slid or email
+    Default: 'Soni.Mirani@fpl.com'
+  Purpose:
+    Type: String
+    Description: please provide a detailed purpose of this server is being built for.
+
+  
+
+  OpsWindow:
+    Type: String
+    Default: '0700,1900'
+    Description: 'Please enter the Start and Stop in the following format 0700,1900'
+
+  WeekendOperation:
+    Type: String
+    Default: "FALSE"
+    Description: 'This field specifies if the servers needs to be running during the weekend'
+    AllowedValues:
+      - "TRUE"
+      - "FALSE"
+
+  BackupWindows:
+    Type: String
+    Default: '0700,1900'
+    Description: 'Please enter the backup windows'
+    
+  MaintenanceWindow:
+    Type: String
+    Default: '0700,1900'
+    Description: 'Please enter the Start and Stop in the following format 0700,1900'
+
+  DataClassification:
+    Type: String
+    Description: 'This field specifies the type of data that would be residing on the servers'
+  OwnerContact:
+    Type: String
+    Description: Please specify email address of the owner.
+
+ # Airflow parameters starts 
+  DBEndPoint:
+    Type: String
+    Description: 'Database endpoint'
+    Default: 'aws-env-en411-inventory-cluster01-rds.cluster-cti8xjsgiyuz.us-east-1.rds.amazonaws.com'
+  DBEngine:
+    Type: String
+    Description: 'Database engine'
+    Default: 'postgresql'
+  DBPort:
+    Type: Number
+    MinValue: 1024
+    MaxValue: 65535
+    Description: 'Database port'
+    Default: 5605
+  DBName:
+    Type: String
+    Description: 'Database name'
+    Default: 'airflowd'
+  DBUserName:
+    Type: String
+    Description: 'Database username'
+    Default: 'audit_app_owner'
+  DBPassword:
+    NoEcho: true
+    Type: String
+    Description: 'DB Password'
+    Default: 'audit_app_owner123'
+  LogsBucket:
+    Type: String
+    Description: 'logs bucket'
+    Default: '2env-edp-platform-en411-s3dlmigration/airflow/logs/'
+  LogConnID:
+    Type: String
+    Description: 'logs Connection ID in Airflow'
+    Default: 'MyS3Conn'
+  LoadExampleDags:
+    Type: String
+    Description: 'Load example DAGs'
+    AllowedValues:
+      - 'False'
+      - 'True'
+    Default: 'False'
+  LoadExampleDags:
+    Type: String
+    Description: 'Load example DAGs'
+    AllowedValues:
+      - 'False'
+      - 'True'
+    Default: 'False'
+  LoadDefaultCons:
+    Type: String
+    Description: 'Load default connections'
+    AllowedValues:
+      - 'False'
+      - 'True'
+    Default: 'False'
+  WebServerPort:
+    Type: Number
+    MinValue: 1024
+    MaxValue: 65535
+    Default: 8080
+    Description: 'Web server port'
+  DBUserNameAudit:
+    Type: String
+    Description: 'audit username'
+    Default: 'audit_app_user'
+  DBPasswordAudit:
+    NoEcho: true
+    Type: String
+    Description: 'DB Password Audit'
+    Default: 'audit_app_user123'
+# Airflow parameters ends
+
+####################################### Mappings ############################################
+Mappings:
+  # Mappings for AMI ID information based on OS
+  OSMap:
+    Linux:
+      AMI: ami-01aff6b47cc3eafdd
+      HdSize: 140
+      DeviceName: /dev/xvda
+
+  AccountIDMap:
+    '707512021127':
+      VPCShortName: Core
+    '359300531472':
+      VPCShortName: CoreTest
+    '889535458826':
+      VPCShortName: CoreDR
+    '434940588922':
+      VPCShortName: EnterpriseProd
+    '129801215131':
+      VPCShortName: EnterpriseQA
+    '288355943657':
+      VPCShortName: EnterpriseDev
+    '524246855650':
+      VPCShortName: EnterpriseSandbox
+    '120380718976':
+      VPCShortName: NEERProd
+    '926173705195':
+      VPCShortName: NEERQA
+    '733125211443':
+     VPCShortName: NEERDev
+    '484902404805':
+      VPCShortName: NEERSandbox
+    '678078281154':
+      VPCShortName: NEERTest
+    '430004966399':
+      VPCShortName: FPLProd
+    '485449107334':
+      VPCShortName: FPLQA
+    '977465404123':
+      VPCShortName: FPLDev
+    '237980099910':
+      VPCShortName: FPLSandbox
+    '688642023437':
+      VPCShortName: SecurityProd
+    '343234139589':
+      VPCShortName: SecurityTest
+    '480804328775':
+      VPCShortName: Isolation
+    '914606261750':
+      VPCShortName: NEERDR
+    '202055847252':
+      VPCShortName: FPLDR
+    '516627182506':
+      VPCShortName: FPLTest
+    '719322411134':
+      VPCShortName: GulfPowerDev
+    '546978450329':
+      VPCShortName: GulfPowerTest
+    '649713442868': 
+      VPCShortName: GulfPowerQA
+    '374887338695': 
+      VPCShortName: GulfPowerProd
+    '469183181955': 
+      VPCShortName: FPLDEEQA
+    '854153732541': 
+      VPCShortName: FPLDEEProd
+
+  # Mappings for Availability zones
+  AZMap:
+    zone:
+      a: A
+      b: B
+      c: C
+
+  # Mappings for Region
+  RegionMap:
+    us-east-1:
+      Region: V
+      RegionLower: v
+    us-east-2:
+      Region: O
+      RegionLower: o
+
+####################################### Resources #######################################
+
+Resources:
+#L4 Security group EC2 server
+  L4EC2SG:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Join
+        - '-'
+        - - L4
+          - !Ref AppCode
+          - !Ref ApplicationTier
+          - !FindInMap [AccountIDMap, !Ref "AWS::AccountId", VPCShortName]
+          - !ImportValue Account-Global-AccountCode
+          - SG
+      GroupDescription: Layer 4 Security Group for EC2 Server
+      VpcId:
+        Fn::ImportValue:
+          Fn::Join:
+          - "-"
+          - - "VPC"
+            - !FindInMap [AccountIDMap, !Ref "AWS::AccountId", VPCShortName]
+            - "VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: TCP
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.0.0.0/8
+          Description: HTTPS Web port
+        - IpProtocol: TCP
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.0.0.0/8
+          Description: HTTP Web port
+        - IpProtocol: TCP
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 10.0.0.0/8
+          Description: Allow to access SSH port
+        - IpProtocol: TCP
+          FromPort: 8080
+          ToPort: 8080
+          CidrIp: 10.0.0.0/8
+          Description: Allow to access application port
+      SecurityGroupEgress:
+        - IpProtocol: TCP
+          FromPort: 53
+          ToPort: 53
+          CidrIp: 10.0.0.0/8
+          Description: DNS port
+        - IpProtocol: tcp
+          FromPort: '3268'
+          ToPort: '3268'
+          CidrIp: 155.109.192.136/32
+          Description: (On-Prem) Globalcatalog
+        - IpProtocol: "-1"
+          CidrIp: 0.0.0.0/0
+          Description: All outbound traffic
+      Tags:
+        - Key: AppCode
+          Value: !Ref AppCode
+        - Key: Name
+          Value: !Join
+            - '-'
+            - - L4
+              - !Ref AppCode
+              - !Ref ApplicationTier
+              - !FindInMap [AccountIDMap, !Ref "AWS::AccountId", VPCShortName]
+              - !ImportValue Account-Global-AccountCode
+              - SG
+        - Key: Requestor
+          Value: !Ref Requestor
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: OwnerContact
+          Value: !Ref OwnerContact
+        - Key: Purpose
+          Value: !Ref Purpose
+        - Key: StackName
+          Value: !Ref AWS::StackName
+  #EBS Volume
+  # EBSVol01:
+  #   Type: AWS::EC2::Volume
+  #   Properties:
+  #    AvailabilityZone: !Join
+  #       - ''
+  #       - - !Ref 'AWS::Region'
+  #         - !Ref AvailabilityZone
+  #    Size: 128
+  #    VolumeType: gp2
+  #    Encrypted: True
+  #    KmsKeyId: !ImportValue Host-Default-KMS
+  #   DeletionPolicy: Snapshot
+
+  # Elastic network inteface
+  ENI01:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      SubnetId:
+        Fn::ImportValue:
+          !Join ['-', ['VPC', !Ref VPCShortName, !FindInMap [ AZMap, zone, !Ref AvailabilityZone ], !Ref ApplicationTier,'SUBNET']]
+      Description: Elastic network interface for ec2 instance
+      GroupSet:
+        - Fn::ImportValue:
+            !Join ['-',[ 'SG', !Ref VPCShortName, 'L1SG' ] ]
+        - Fn::ImportValue:
+            !Join ['-',[ 'SG', !Ref VPCShortName, 'L2RHSG' ] ]
+        - !Ref L4EC2SG
+      SourceDestCheck: True
+      Tags:
+        - Key: AppCode
+          Value: !Ref AppCode
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: OwnerContact
+          Value: !Ref OwnerContact
+        - Key: Requestor
+          Value: !Ref Requestor
+        - Key: Purpose
+          Value: !Ref Purpose
+        - Key: Name
+          Value:
+            Fn::Join:
+              - '-'
+              - - Fn::Join:
+                  - ''
+                  - - '2'
+                    - !ImportValue  Account-Global-AccountCode
+                    - Fn::ImportValue:
+                        !Join ['-',[Account-Global-RegionCode, !Ref 'AWS::Region']]
+                - !Ref TypeOfInstance
+                - !Join ['',[ !Ref AppCode, !Ref HostNumber ]]
+                - 'ENI'
+
+  #EC2 Instance
+  EC2Instance01:
+    Type: AWS::EC2::Instance
+    Properties:
+      # KeyName: 2FN-LINUX-03-KP
+      IamInstanceProfile: "NEE-EC2-ITAM-Role"
+      DisableApiTermination: !Ref SetTerminationProtection
+      InstanceType: !Ref InstanceType
+      ImageId: !FindInMap [ OSMap , !Ref OperatingSystem, AMI ]
+      NetworkInterfaces:
+        - NetworkInterfaceId: !Ref ENI01
+          DeviceIndex: '0'
+      AvailabilityZone: !Join
+        - ''
+        - - !Ref 'AWS::Region'
+          - !Ref AvailabilityZone
+      # Volumes:
+      #   -
+      #     VolumeId: !Ref EBSVol01
+      #     Device: /dev/xvdb
+
+      #################################### Execute commands and boot time. ####################################
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+            - |
+              #cloud-config
+              runcmd:
+              - hostname "${Ec2Hostname}"
+              - echo "${Ec2Hostname}" > /etc/hostname
+              - authconfig --update --disablesssd --disablesssdauth --disablemkhomedir
+              - echo "sudo /root/AWSLnxinit_bootstrap.sh > /root/AWSLnxinit_bootstrap.log 2>&1" | at -m now + 8 minute
+              # Airflow scripts starts
+              - echo "[INFO] Setting session proxy..."
+              - export https_proxy=webproxy.fpl.com:8080
+              - export http_proxy=webproxy.fpl.com:8080
+              - export no_proxy=169.254.169.254,10.*
+              - export AWS_STACK_NAME="${AWS::StackName}"
+              - export LOGS_BUCKET="${LogsBucket}"
+              - export DB_ENGINE="${DBEngine}"
+              - export DB_PORT="${DBPort}"
+              - export DB_HOST="${DBEndPoint}"
+              - export DB_DBNAME="${DBName}"
+              - export DB_USERNAME="${DBUserName}"
+              - export DB_PASSWORD="${DBPassword}"
+              - export AUDIT_USERNAME="${DBUserNameAudit}"
+              - export AUDIT_PASSWORD="${DBPasswordAudit}"
+              - export LOAD_EXAMPLES="${LoadExampleDags}"
+              - export LOAD_DEFAULTS="${LoadDefaultCons}"
+              - export WEB_SERVER_PORT="${WebServerPort}"
+              - export LOG_CONN_ID="${LogConnID}"
+              - mkdir /opt/turbine
+              - wget http://neer-bitbucket:7990/rest/api/latest/projects/CSDAT/repos/airflow/archive?format=tar -O /opt/turbine/scripts.tar
+              - tar -xvf /opt/turbine/scripts.tar -C /opt/turbine/
+              - sed -i 's/\r$//' /opt/turbine/setup_scripts/systemd/airflow.env
+              - sed -i 's/\r$//' /opt/turbine/setup_scripts/commons.setup.sh
+              - chmod +x /opt/turbine/setup_scripts/webserver.setup.sh
+              - sed -i 's/\r$//' /opt/turbine/setup_scripts/webserver.setup.sh
+              - bash /opt/turbine/setup_scripts/webserver.setup.sh
+              - chmod +x /opt/turbine/setup_scripts/scheduler.setup.sh
+              - sed -i 's/\r$//' /opt/turbine/setup_scripts/scheduler.setup.sh
+              - bash /opt/turbine/setup_scripts/scheduler.setup.sh
+              - chmod +x /opt/turbine/setup_scripts/workerset.setup.sh
+              - sed -i 's/\r$//' /opt/turbine/setup_scripts/workerset.setup.sh
+              - bash /opt/turbine/setup_scripts/workerset.setup.sh
+              - chmod +x /opt/turbine/setup_scripts/flower.setup.sh
+              - sed -i 's/\r$//' /opt/turbine/setup_scripts/flower.setup.sh
+              - bash /opt/turbine/setup_scripts/flower.setup.sh
+              - chown -R ec2-user:ec2-user /opt/airflow/
+              - chown -R ec2-user:ec2-user /run/airflow/
+                # Airflow scripts ends
+            - { Ec2Hostname: !Join [ "-", [ !Join ["",['2', !ImportValue Account-Global-AccountCode, !FindInMap [RegionMap, !Ref 'AWS::Region', Region]]], !Ref TypeOfInstance, !Join ['',[ !Ref AppCode, !Ref HostNumber ]]]]  }
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Join:
+              - '-'
+              - - Fn::Join:
+                  - ''
+                  - - '2'
+                    - !ImportValue  Account-Global-AccountCode
+                    - Fn::ImportValue:
+                        !Join ['-',[Account-Global-RegionCode, !Ref 'AWS::Region']]
+                - !Ref TypeOfInstance
+                - !Join ['',[ !Ref AppCode, !Ref HostNumber ]]
+        - Key: AppCode
+          Value: !Ref AppCode
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: OS
+          Value: !Ref OperatingSystem
+        - Key: HA_DRTier
+          Value: !Ref HADRTier
+        - Key: ApplicationTier
+          Value: !Ref ApplicationTier
+        - Key: AutomateShutdown
+          Value: !Ref AutomateShutdown
+        - Key: Requestor
+          Value: !Ref Requestor
+        - Key: OpsWindow
+          Value: !Ref OpsWindow
+        - Key: Tenant Detail
+          Value: EC002
+        - Key: Purpose
+          Value: !Ref Purpose
+        - Key: WeekendOperation
+          Value: !Ref WeekendOperation
+        - Key: BackupWindows
+          Value: !Ref BackupWindows
+        - Key: MaintenanceWindow
+          Value: !Ref MaintenanceWindow
+        - Key: OwnerContact
+          Value: !Ref OwnerContact
+        - Key: DataClassification
+          Value: !Ref DataClassification
+
+####################################### Outputs ##########################################
+Outputs:
+  EC2Instance01HostName:
+    Description: Ec2 instance hostname
+    Value:
+      Fn::Join:
+              - '-'
+              - - Fn::Join:
+                  - ''
+                  - - '2'
+                    - !ImportValue  Account-Global-AccountCode
+                    - Fn::ImportValue:
+                        !Join ['-',[Account-Global-RegionCode, !Ref 'AWS::Region']]
+                - !Ref TypeOfInstance
+                - !Join ['',[ !Ref AppCode, !Ref HostNumber ]]
+
+  Ec2IP:
+    Description: Ec2 instance ipadress
+    Value: !GetAtt EC2Instance01.PrivateIp
+
+  Ec2PriDns:
+    Description: Ec2 instance pviatedns
+    Value: !GetAtt EC2Instance01.PrivateDnsName

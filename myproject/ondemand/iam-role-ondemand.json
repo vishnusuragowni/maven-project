@@ -1,0 +1,381 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "s3:DeleteObjectVersion",
+                "s3:RestoreObject",
+                "s3:ReplicateObject",
+                "s3:AbortMultipartUpload",
+                "s3:DeleteObject",
+                "s3:ListMultipartUploadParts",
+                "s3:ListBucket*",
+                "s3:PutObject*",
+                "s3:GetObject*",
+                "s3:GetBucketVersioning",
+                "s3:PutBucketNotification",
+                "s3:GetBucketNotification"
+            ],
+            "Resource": [
+                "arn:aws:s3:::*-en411-*",
+                "arn:aws:s3:::*-en411-*/*"
+            ],
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "s3:ListAllMyBuckets"
+            ],
+            "Resource": "*",
+            "Effect": "Allow",
+            "Sid": "ToIdentifyBucket"
+        },
+        {
+            "Action": [
+                "s3:GetBucketPolicy",
+                "s3:GetBucketPolicyStatus",
+                "s3:PutBucketPolicy"
+            ],
+            "Resource": "*",
+            "Effect": "Deny",
+            "Sid": "ExplicitDeny"
+        },
+        {
+            "Action": [
+                "s3:GetBucketLocation",
+                "s3:GetObject",
+                "s3:ListBucket",
+                "s3:ListBucketMultipartUploads",
+                "s3:ListMultipartUploadParts",
+                "s3:AbortMultipartUpload",
+                "s3:CreateBucket",
+                "s3:PutObject"
+            ],
+            "Resource": [
+                "arn:aws:s3:::aws-athena-query-results-*"
+            ],
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "ec2:*"
+            ],
+            "Resource": "*",
+            "Effect": "Allow",
+            "Sid": "EC2Access"
+        },
+        {
+            "Action": [
+                "ec2:DeleteEgressOnlyInternetGateway",
+                "ec2:CreateInternetGateway",
+                "ec2:AttachInternetGateway",
+                "ec2:DeleteInternetGateway",
+                "ec2:CreateEgressOnlyInternetGateway",
+                "ec2:DetachInternetGateway",
+                "ec2:DeleteClientVpnEndpoint",
+                "ec2:ExportClientVpnClientConfiguration",
+                "ec2:ModifyClientVpnEndpoint",
+                "ec2:ExportClientVpnClientCertificateRevocationList",
+                "ec2:DeleteVpn*",
+                "ec2:TerminateClientVpnConnections",
+                "ec2:CreateVpn*",
+                "ec2:CreateClientVpnRoute",
+                "ec2:DisassociateClientVpnTargetNetwork",
+                "ec2:AttachVpnGateway",
+                "ec2:RevokeClientVpnIngress",
+                "ec2:AssociateClientVpnTargetNetwork",
+                "ec2:DetachVpnGateway",
+                "ec2:CreateClientVpnEndpoint",
+                "ec2:AuthorizeClientVpnIngress",
+                "ec2:ImportClientVpnClientCertificateRevocationList",
+                "ec2:DeleteClientVpnRoute",
+                "ec2:ApplySecurityGroupsToClientVpnTargetNetwork",
+                "ec2:ModifyVpc*",
+                "ec2:MoveAddressToVpc",
+                "ec2:DetachClassicLinkVpc",
+                "ec2:AcceptVpcPeeringConnection",
+                "ec2:CreateVpc*",
+                "ec2:AcceptTransitGatewayVpcAttachment",
+                "ec2:AssociateVpcCidrBlock",
+                "ec2:RejectVpcPeeringConnection",
+                "ec2:DisassociateVpcCidrBlock",
+                "ec2:DeleteTransitGatewayVpcAttachment",
+                "ec2:RejectTransitGatewayVpcAttachment",
+                "ec2:RejectVpcEndpointConnections",
+                "ec2:EnableVpcClassicLink",
+                "ec2:AttachClassicLinkVpc",
+                "ec2:ModifyTransitGatewayVpcAttachment",
+                "ec2:AcceptVpcEndpointConnections",
+                "ec2:CreateTransitGatewayVpcAttachment",
+                "ec2:CreateDefaultVpc",
+                "ec2:DisableVpcClassicLinkDnsSupport",
+                "ec2:DisableVpcClassicLink",
+                "ec2:EnableVpcClassicLinkDnsSupport",
+                "ec2:DeleteVpc*",
+                "ec2:DeleteSpotDatafeedSubscription",
+                "ec2:DeleteSubnet",
+                "ec2:CreateDefaultSubnet",
+                "ec2:CreateSpotDatafeedSubscription",
+                "ec2:AssociateSubnetCidrBlock",
+                "ec2:CreateSubnet",
+                "ec2:DisassociateSubnetCidrBlock",
+                "ec2:ModifySubnetAttribute",
+                "ec2:ReplaceNetworkAclEntry",
+                "ec2:CreateNetworkAcl",
+                "ec2:CreateNetworkAclEntry",
+                "ec2:ReplaceNetworkAclAssociation",
+                "ec2:DeleteNetworkAcl",
+                "ec2:DeleteNetworkAclEntry",
+                "ec2:CreateCustomerGateway",
+                "ec2:CreateDhcpOptions",
+                "ec2:CreateFpgaImage",
+                "ec2:CreateInstanceExportTask",
+                "ec2:CreateNatGateway",
+                "ec2:CreateRoute",
+                "ec2:CreateRouteTable",
+                "ec2:CreateTransitGateway",
+                "ec2:CreateTransitGatewayRoute",
+                "ec2:CreateTransitGatewayRouteTable",
+                "ec2:DeleteCustomerGateway",
+                "ec2:DeleteDhcpOptions",
+                "ec2:DeleteFlowLogs",
+                "ec2:DeleteFpgaImage",
+                "ec2:DeleteNatGateway",
+                "ec2:DeleteRoute",
+                "ec2:DeleteRouteTable",
+                "ec2:DeleteTransitGateway",
+                "ec2:DeleteTransitGatewayRoute",
+                "ec2:DeleteTransitGatewayRouteTable",
+                "ec2:DeprovisionByoipCidr",
+                "ec2:DisableEbsEncryptionByDefault",
+                "ec2:DisableTransitGatewayRouteTablePropagation",
+                "ec2:DisableVgwRoutePropagation",
+                "ec2:DisassociateRouteTable",
+                "ec2:DisassociateTransitGatewayRouteTable",
+                "ec2:EnableTransitGatewayRouteTablePropagation",
+                "ec2:EnableVgwRoutePropagation",
+                "ec2:ExportTransitGatewayRoutes",
+                "ec2:GetTransitGatewayAttachmentPropagations",
+                "ec2:GetTransitGatewayRouteTableAssociations",
+                "ec2:GetTransitGatewayRouteTablePropagations",
+                "ec2:ModifyEbsDefaultKmsKeyId",
+                "ec2:ModifyFpgaImageAttribute",
+                "ec2:ModifyIdFormat",
+                "ec2:ModifyIdentityIdFormat",
+                "ec2:ModifyVpnConnection",
+                "ec2:ProvisionByoipCidr",
+                "ec2:ReplaceRouteTableAssociation",
+                "ec2:ReplaceTransitGatewayRoute",
+                "ec2:ResetEbsDefaultKmsKeyId",
+                "ec2:ResetFpgaImageAttribute",
+                "ec2:RestoreAddressToClassic",
+                "ec2:WithdrawByoipCidr"
+            ],
+            "Resource": "*",
+            "Effect": "Deny"
+        },
+        {
+            "Action": [
+                "iam:PassRole"
+            ],
+            "Resource": [
+                "arn:aws:iam::288355943657:role/*edp*",
+                "arn:aws:iam::288355943657:role/*EDP*",
+                "arn:aws:iam::288355943657:role/*EN411*",
+                "arn:aws:iam::288355943657:role/*en411*"
+            ],
+            "Effect": "Allow",
+            "Sid": "PassARole"
+        },
+        {
+            "Action": [
+                "iam:GetInstanceProfile",
+                "iam:GetRole",
+                "iam:ListAttachedRolePolicies",
+                "iam:ListInstanceProfiles",
+                "iam:ListInstanceProfilesForRole",
+                "iam:ListRolePolicies",
+                "iam:ListRoleTags"
+            ],
+            "Resource": [
+                "arn:aws:iam::288355943657:role/*edp*",
+                "arn:aws:iam::288355943657:role/*EDP*",
+                "arn:aws:iam::288355943657:role/*EN411*",
+                "arn:aws:iam::288355943657:role/*en411*",
+                "arn:aws:iam::288355943657:instance-profile/*edp*",
+                "arn:aws:iam::288355943657:instance-profile/*EDP*",
+                "arn:aws:iam::288355943657:instance-profile/*EN411*",
+                "arn:aws:iam::288355943657:instance-profile/*en411*"
+            ],
+            "Effect": "Allow",
+            "Sid": "IAMReadPermissions"
+        },
+        {
+            "Action": [
+                "cloudwatch:Describe*",
+                "cloudwatch:Get*",
+                "cloudwatch:List*",
+                "cloudformation:*"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "cloudwatch:DescribeAlarmHistory",
+                "cloudwatch:DescribeAlarms",
+                "cloudwatch:EnableAlarmActions",
+                "cloudwatch:GetDashboard",
+                "cloudwatch:ListTagsForResource",
+                "cloudwatch:PutDashboard",
+                "cloudwatch:PutMetricAlarm",
+                "cloudwatch:SetAlarmState"
+            ],
+            "Resource": [
+                "arn:aws:cloudwatch:us-east-1:288355943657:alarm:*en411*",
+                "arn:aws:cloudwatch:us-east-1:288355943657:alarm:*EN411*",
+                "arn:aws:cloudwatch::288355943657:dashboard/*en411*",
+                "arn:aws:cloudwatch::288355943657:dashboard/*EN411*"
+            ],
+            "Effect": "Allow",
+            "Sid": "CloudWatch"
+        },
+        {
+            "Action": [
+                "cloudwatch:PutMetricData"
+            ],
+            "Resource": "*",
+            "Effect": "Allow",
+            "Sid": "CloudWatch1"
+        },
+        {
+            "Action": [
+                "kms:Encrypt",
+                "kms:Decrypt",
+                "kms:ReEncrypt*",
+                "kms:GenerateDataKey*",
+                "kms:DescribeKey",
+                "kms:CreateGrant",
+                "kms:ListGrants",
+                "kms:RevokeGrant",
+                "kms:ListKeys",
+                "kms:ListAliases",
+                "kms:ListKeyPolicies",
+                "kms:GetKeyPolicy",
+                "kms:GetKeyRotationStatus"
+            ],
+            "Resource": "*",
+            "Effect": "Allow",
+            "Sid": "KMS"
+        },
+        
+        {
+            "Action": [
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:FilterLogEvents",
+                "logs:GetLogEvents"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "logs:Put*",
+                "logs:Stop*",
+                "logs:Create*",
+                "logs:Delete*",
+                "logs:UntagLogGroup",
+                "logs:Start*",
+                "logs:TagLogGroup",
+                "logs:FilterLogEvents",
+                "logs:PutRetentionPolicy",
+                "logs:TestMetricFilter"
+            ],
+            "Resource": [
+                "arn:aws:logs:us-east-1:288355943657:log-group:*EN411*",
+                "arn:aws:logs:us-east-1:288355943657:log-group:*EN411*::",
+                "arn:aws:logs:us-east-1:288355943657:log-group:*en411*",
+                "arn:aws:logs:us-east-1:288355943657:log-group:*en411*::"
+            ],
+            "Effect": "Allow",
+            "Sid": "Logs"
+        },
+        {
+            "Action": [
+                "sns:Get*",
+                "sns:List*",
+                "sns:CreateTopic",
+                "sns:DeleteTopic",
+                "sns:SetTopicAttributes",
+                "sns:Subscribe",
+                "sns:Publish",
+                "sns:Unsubscribe"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "dms:DescribeAccountAttributes",
+                "dms:DescribeCertificates",
+                "dms:DescribeConnections",
+                "dms:DescribeEndpointTypes",
+                "dms:DescribeEndpoints",
+                "dms:DescribeEventCategories",
+                "dms:DescribeEventSubscriptions",
+                "dms:DescribeEvents",
+                "dms:DescribeOrderableReplicationInstances",
+                "dms:DescribeEndpoints",
+                "dms:DescribeReplicationInstances",
+                "dms:DescribeReplicationSubnetGroups",
+                "dms:DescribeReplicationTasks",
+                "dms:ListTagsForResource",
+                "dms:Create*",
+                "dms:StartReplicationTask",
+                "dms:TestConnection",
+                "dms:Delete*",
+                "dms:StopReplicationTask"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "secretsmanager:Describe*",
+                "secretsmanager:Get*"
+            ],
+            "Resource": [
+                "arn:aws:secretsmanager:us-east-1:288355943657:secret:*EN411*",
+                "arn:aws:secretsmanager:us-east-1:288355943657:secret:*en411*"
+            ],
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "sqs:GetQueueAttributes",
+                "sqs:GetQueueUrl",
+                "sqs:ListDeadLetterSourceQueues",
+                "sqs:ListQueues"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        },
+        {
+            "Action": [
+                "lambda:InvokeFunction"
+            ],
+            "Resource": "*",
+            "Effect": "Allow"
+        }
+    ]
+}

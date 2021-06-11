@@ -1,0 +1,428 @@
+ ####################################################################################
+# Service Catalog Cloud formation template that provisions EC2 instances
+# Created by: Cedric El Khoury
+# Date: 10/29/2020
+# Description : EC2 Workstation template for EKS work
+####################################################################################
+AWSTemplateFormatVersion: 2010-09-09
+Description: AWS CloudFormation Template for creating EKS Workstation
+
+# ==============================
+# Define CF Template Parameters
+# ==============================
+
+Parameters:
+  InstanceTypeParameter:
+    Type: String
+    Default: t2.medium
+    AllowedValues:
+    - t1.micro
+    - t2.nano
+    - t2.micro
+    - t2.small
+    - t2.medium
+    - t2.large
+    - m1.small
+    - m1.medium
+    - m1.large
+    - m1.xlarge
+    - m2.xlarge
+    - m2.2xlarge
+    - m2.4xlarge
+    - m3.medium
+    - m3.large
+    - m3.xlarge
+    - m3.2xlarge
+    - m4.large
+    - m4.xlarge
+    - m4.2xlarge
+    - m4.4xlarge
+    - m4.10xlarge
+    - m5.large
+    - m5.4xlarge
+    - c1.medium
+    - c1.xlarge
+    - c3.large
+    - c3.xlarge
+    - c3.2xlarge
+    - c3.4xlarge
+    - c3.8xlarge
+    - c4.large
+    - c4.xlarge
+    - c4.2xlarge
+    - c4.4xlarge
+    - c4.8xlarge
+    - c5.large
+    - c5.xlarge
+    - g2.2xlarge
+    - g2.8xlarge
+    - r3.large
+    - r3.xlarge
+    - r3.2xlarge
+    - r3.4xlarge
+    - r3.8xlarge
+    - r4.xlarge
+    - r4.2xlarge
+    - r4.4xlarge
+    - r4.8xlarge
+    - r4.16xlarge 
+    - r5.2xlarge
+    - r5.4xlarge   
+    - r5.8xlarge
+    - r5.16xlarge 
+    - i2.xlarge
+    - i2.2xlarge
+    - i2.4xlarge
+    - i2.8xlarge
+    - d2.xlarge
+    - d2.2xlarge
+    - d2.4xlarge
+    - d2.8xlarge
+    - hi1.4xlarge
+    - hs1.8xlarge
+    - cr1.8xlarge
+    - cc2.8xlarge
+    - cg1.4xlarge
+    ConstraintDescription: must be a valid EC2 instance type.
+    Description: 'Enter type of instance that needs to be provisioned. Default is t2.micro.'
+
+  TypeOfInstance:
+    Type: String
+    Description: 'Two digit identifier for instace usage. Default is GC (General Compute)'
+    AllowedValues:
+      - GC
+      - RD
+      - DB
+      - AP
+      - BS
+      - CS
+      - AD
+      - EM
+      - JS
+
+  AppCode:
+    Type: String
+    MaxLength: '5'
+    AllowedPattern: '^([a-zA-Z0-9_-]){5}$'
+    Description: 'The application code name cannot be of more that 5 characters'
+    ConstraintDescription: "Appcode field does not match the required constraints"
+    
+  Environment:
+    Type: String
+    AllowedValues:
+      - Prod
+      - Test
+      - Dev
+      - QA
+      - DR
+      - Sandbox
+    Default: Dev
+
+  Requestor:
+    Type: String
+    Description: Please specify email address of the requestor.
+
+  OwnerContact:
+    Type: String
+    Description: Please specify email address of the owner.
+
+  OS:
+    Type: String
+    AllowedValues:
+      - "Linux"
+      - "LinuxOracle"
+    Description: 'Please enter the flavor of LINUX'
+    Default: "Linux"
+    
+  HADRTier:
+    Type: String
+    AllowedValues:
+     - 1
+     - 2
+     - 3
+     - 4
+     - 5
+    Default: 5
+    Description: 'Please specify the DR tier for your instances'
+
+  ApplicationTier:
+    Type: String
+    AllowedValues:
+      - App
+      - DataBase
+      - Web
+      - Visibility
+      - White
+      - Lambda
+      - Prime
+    Default: App
+
+  AutomateShutdown:
+    Type: String
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: 'This field specifies if the server needs to be automatically shut down every day.'
+    Default: 'no'
+
+  OpsWindow:
+    Type: String
+    Default: '0700,1900'
+    Description: 'Please enter the Start and Stop in the following format 0700,1900'
+
+  WeekendOperation:
+    Type: String
+    Default: "FALSE"
+    Description: 'This field specifies if the servers needs to be running during the weekend'
+    AllowedValues:
+      - "TRUE"
+      - "FALSE"
+
+  BackupWindows:
+    Type: String
+    Default: '0700,1900'
+    Description: 'Please enter the backup windows'
+    
+  MaintenanceWindow:
+    Type: String
+    Default: '0700,1900'
+    Description: 'Please enter the Start and Stop in the following format 0700,1900'
+
+  DataClassification:
+    Type: String
+    Description: 'This field specifies the type of data that would be residing on the servers'
+
+  HostNumber:
+    Type: String
+    AllowedPattern: '^([0-9]){2}$'
+    Description: 'Please assigned a number for this EC2 instance between 01 and 99. Please make sure it is unique'
+    Default: '05'
+    ConstraintDescription: "Hostnumber field has to be a 2 digit number between 01 and 99"
+   
+  Ec2Instance01SubnetID:
+    Type: AWS::EC2::Subnet::Id
+    Description: Instance will be launched in the subnet specified.
+ 
+  L4SG:
+    Type: AWS::EC2::SecurityGroup::Id
+    Description: Please specify additional security group to be attached to the EC2 instance. L1, L2 and L3 will be by default attached.
+  
+ 
+ 
+# ==============================
+# Define CF Template Mappings
+# ==============================   
+
+Mappings:
+# Mappings for AMI ID information based on OS
+  OS:
+   
+    'Linux':
+      AMI: "ami-01aff6b47cc3eafdd"
+      HdSize: 140
+      DeviceName: "/dev/xvda"
+      SecGroupL2: L2RHSG
+
+      
+    
+    'LinuxOracle':
+      AMI: "ami-b6bc65c9"
+      HdSize: 128
+      DeviceName: "/dev/sda1"
+      SecGroupL2: L2RHSG
+     
+
+# Mappings for Availability zones    
+  AvailabilityZ:
+      'zone':
+        a: 'A'
+        b: 'B'
+        c: 'C'
+
+  AccountIDMap:
+    '707512021127':
+      VPCShortName: Core
+    '359300531472':
+      VPCShortName: CoreTest
+    '889535458826':
+      VPCShortName: CoreDR
+    '434940588922':
+      VPCShortName: EnterpriseProd
+    '129801215131':
+      VPCShortName: EnterpriseQA
+    '288355943657':
+      VPCShortName: EnterpriseDev
+    '524246855650':
+      VPCShortName: EnterpriseSandbox
+    '120380718976':
+      VPCShortName: NEERProd
+    '926173705195':
+      VPCShortName: NEERQA
+    '733125211443':
+      VPCShortName: NEERDev
+    '484902404805':
+      VPCShortName: NEERSandbox
+    '678078281154':
+      VPCShortName: NEERTest
+    '430004966399':
+      VPCShortName: FPLProd
+    '485449107334':
+      VPCShortName: FPLQA
+    '977465404123':
+      VPCShortName: FPLDev
+    '237980099910':
+      VPCShortName: FPLSandbox
+    '688642023437':
+      VPCShortName: SecurityProd
+    '343234139589':
+      VPCShortName: SecurityTest
+    '480804328775':
+      VPCShortName: Isolation
+    '914606261750':
+      VPCShortName: NEERDR
+    '202055847252':
+      VPCShortName: FPLDR
+    '516627182506':
+      VPCShortName: FPLTest
+    '719322411134':
+      VPCShortName: GulfPowerDev
+    '546978450329':
+      VPCShortName: GulfPowerTest
+    '649713442868': 
+      VPCShortName: GulfPowerQA
+    '374887338695': 
+      VPCShortName: GulfPowerProd 
+
+# ==============================
+# Define CF Template Resources
+# ==============================
+
+Resources:
+#################################### Template ####################################
+
+ EC2Instance1:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      DisableApiTermination: false
+      InstanceType: !Ref InstanceTypeParameter
+      ImageId: !FindInMap [ OS , !Ref OS, AMI ]
+      KeyName: "Ganji2"
+      IamInstanceProfile: "NEE-EC2-ITAM-Role"
+      SecurityGroupIds:
+       - Fn::ImportValue:
+            !Join ['-',[ "SG", !FindInMap [ AccountIDMap, !Ref "AWS::AccountId", VPCShortName ],!FindInMap [ OS , !Ref OS , SecGroupL2 ] ] ]
+       - Fn::ImportValue:
+            !Join ['-',[ "SG", !FindInMap [ AccountIDMap, !Ref "AWS::AccountId", VPCShortName ], "L1SG" ] ]
+       - !Ref L4SG
+       
+      
+      SubnetId: !Ref Ec2Instance01SubnetID
+
+      BlockDeviceMappings:
+        - DeviceName: !FindInMap [ OS , !Ref OS, DeviceName ]
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: !FindInMap [ OS , !Ref OS, HdSize ]
+            Encrypted: "true"
+ 
+
+#################################### Execute commands and boot time. ####################################
+      UserData:
+        Fn::Base64:
+          Fn::Sub:
+          - |
+            #cloud-config
+            runcmd:
+            - hostname "${Ec2Hostname}"
+            - echo "${Ec2Hostname}" > /etc/hostname
+            - authconfig --update --disablesssd --disablesssdauth --disablemkhomedir
+            - echo "sudo /root/AWSLnxinit_bootstrap.sh > /root/AWSLnxinit_bootstrap.log 2>&1" | at -m now + 8 minute
+            - echo "export http_proxy=http://webproxyeva.fpl.com:8080" >> /etc/profile
+            - echo "export https_proxy=https://webproxyeva.fpl.com:8080" >> /etc/profile
+            - echo 'export no_proxy="169.254.169.254"' >> /etc/profile 
+
+          -  Ec2Hostname: !Join [ "-", [ !Join ["",['2', !ImportValue  Account-Global-AccountCode, "V"]], !Ref TypeOfInstance, !Join ['',[ !Ref AppCode, !Ref HostNumber ]]]] 
+
+      Tags:
+        - Key: Name
+          Value:
+            Fn::Join:
+              - '-'
+              - - Fn::Join:
+                  - ''
+                  - - "2"
+                    - !ImportValue  Account-Global-AccountCode
+                    - Fn::ImportValue:
+                        !Join ['-',[Account-Global-RegionCode, !Ref "AWS::Region"]]
+                - !Ref TypeOfInstance
+                - !Join ['',[ !Ref AppCode, !Ref HostNumber ]]
+
+        - Key: AppCode
+          Value: !Ref AppCode
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: Requestor
+          Value: !Ref Requestor
+        - Key: OS
+          Value: !Ref OS
+        - Key: HA_DRTier
+          Value: !Ref HADRTier
+        - Key: ApplicationTier
+          Value: !Ref ApplicationTier
+        - Key: AutomateShutdown
+          Value: !Ref AutomateShutdown
+        - Key: OpsWindow
+          Value: !Ref OpsWindow
+        - Key: Tenant Detail
+          Value: SB001
+        - Key: WeekendOperation
+          Value: !Ref WeekendOperation
+        - Key: BackupWindows
+          Value: !Ref BackupWindows
+        - Key: MaintenanceWindow
+          Value: !Ref MaintenanceWindow
+        - Key: DataClassification
+          Value: !Ref DataClassification
+
+# ==============================
+# Define Security Groups
+# ==============================
+
+# ==============================
+# CF Template OUTPUTS
+# ==============================
+
+Outputs:
+  EC2Instance1HostName:
+    Description: Output for EC2 Instance
+    Value:
+      Fn::Join:
+        - '-'
+        - - Fn::Join:
+            - ''
+            - - "2"
+              - !ImportValue  Account-Global-AccountCode
+              - Fn::ImportValue:
+                  !Join ['-',[Account-Global-RegionCode, !Ref "AWS::Region"]]
+          - !Ref TypeOfInstance
+          - !Join ['',[ !Ref AppCode, !Ref HostNumber ]]
+ #   Export:
+ #       Name: !Sub "${AWS::StackName}-Name-EC2Instance1"
+
+  Ec2ID:
+    Description: Output for EC2 Instance
+    Value: !GetAtt EC2Instance1.PrivateIp
+#    Export:
+#        Name: !Sub "${AWS::StackName}-EC2-IP-EC2Instance1"
+
+  Ec2AZ:
+    Description: "Availability zone of the newly created Instance"
+    Value: !GetAtt EC2Instance1.AvailabilityZone
+#    Export:
+#      Name: !Sub "${AWS::StackName}-EC2-AZ-EC2Instance1"
+
+  Ec2PriDns:
+    Description: "Private DNSName of the newly created Instance"
+    Value: !GetAtt EC2Instance1.PrivateDnsName
+#    Export:
+#      Name: !Sub "${AWS::StackName}-EC2-DNS-EC2Instance1"

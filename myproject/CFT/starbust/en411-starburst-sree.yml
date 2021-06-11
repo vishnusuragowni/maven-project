@@ -1,0 +1,2129 @@
+AWSTemplateFormatVersion: 2010-09-09
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Network Configuration
+        Parameters:
+          - VPC
+          - Subnet
+          - SelectedSubnetAutoAssignsPublicIp
+          - SecurityGroups
+      - Label:
+          default: EC2 Configuration
+        Parameters:
+          - CoordinatorInstanceType
+          - WorkersInstanceType
+          - KeyName
+          - WorkersCount
+          - HACoordinatorsCount
+          - KeepCoordinatorNode
+      - Label:
+          default: Presto Configuration
+        Parameters:
+          - AllowExternalAccessOnHttp
+          - AdditionalCoordinatorConfigurationURI
+          - AdditionalWorkersConfigurationURI
+          - BootstrapScriptURI
+          - PrestoHttpPort
+          - LicenseURI
+      - Label:
+          default: Hive Connector Options
+        Parameters:
+          - MetastoreType
+          - ExternalMetastoreHost
+          - ExternalMetastorePort
+          - ExternalRdbmsMetastoreUserName
+          - ExternalRdbmsMetastorePassword
+          - ExternalRdbmsMetastoreDatabaseName
+      - Label:
+          default: Ranger Options
+        Parameters:
+          - EnableRanger
+          - RangerAdminPassword
+          - RangerBackendType
+          - ExternalRdbmsRangerHost
+          - ExternalRdbmsRangerPort
+          - ExternalRdbmsRangerDatabaseName
+          - ExternalRdbmsRangerUserName
+          - ExternalRdbmsRangerPassword
+          - RangerConfigFile
+          - RangerBootstrapScript
+      - Label:
+          default: Ranger LDAP user synchronization
+        Parameters:
+          - EnableRangerUserSync
+          - RangerUserSyncConfigFile
+      - Label:
+          default: Advanced AWS S3 Configuration
+        Parameters:
+          - S3Endpoint
+          - S3AccessKey
+          - S3SecretKey
+      - Label:
+          default: Monitoring
+        Parameters:
+          - EnableCloudWatchMetrics
+      - Label:
+          default: Advanced Configuration
+        Parameters:
+          - IamInstanceProfile
+Mappings:
+  RegionMap:
+    us-east-1:
+      id: ami-0167b9806476e461a
+    us-east-2:
+      id: ami-0e85979c5dfd94d54
+    us-west-1:
+      id: ami-05daa559974b4e5e8
+    us-west-2:
+      id: ami-0831cea9ac79d4f8f
+    eu-central-1:
+      id: ami-0a3e127a82416436f
+    eu-west-1:
+      id: ami-0d66b8abc16c6ade4
+    eu-west-2:
+      id: ami-0357711d736628517
+    eu-west-3:
+      id: ami-0f120c8a415b518ef
+    ap-southeast-1:
+      id: ami-0a6bf7bb4b8f622b1
+Parameters:
+  VPC:
+    Type: 'AWS::EC2::VPC::Id'
+    Description: VPC ID
+    AllowedPattern: .+
+  Subnet:
+    Type: 'AWS::EC2::Subnet::Id'
+    Description: Subnet to use for Presto nodes (must belong to the selected VPC)
+    AllowedPattern: .+
+  SecurityGroups:
+    Type: 'List<AWS::EC2::SecurityGroup::Id>'
+    Description: >-
+      Security Groups for Presto nodes (e.g: allowing SSH access). Must select
+      at least one.
+    AllowedPattern: .+
+  SelectedSubnetAutoAssignsPublicIp:
+    Type: String
+    Description: >
+      Set to no when selected subnet doesn't auto assign public IPs for the
+      created instances. Dedicated VPC Endpoints are created for Presto when
+      subnet does not provide public IPs.
+    AllowedValues:
+      - 'no'
+      - 'yes'
+    Default: 'yes'
+  CoordinatorInstanceType:
+    Type: String
+    Default: r4.8xlarge
+    AllowedValues:
+      - m5.large
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.12xlarge
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r5.12xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+    Description: EC2 instance type of the coordinator
+  WorkersInstanceType:
+    Type: String
+    Default: r4.8xlarge
+    AllowedValues:
+      - m5.large
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.12xlarge
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r5.12xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+    Description: EC2 instance type of the workers
+  KeyName:
+    Description: Name of an EC2 KeyPair to enable SSH access to the instance.
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    AllowedPattern: .+
+  IamInstanceProfile:
+    Description: >
+      (Optional) The name of an instance profile to attach to Presto nodes. This
+      profile needs to have permissions to access SQS and AutoScaling services
+      for graceful node auto-scaling, access to IAM and S3 services for the
+      Presto Hive connector and Glue for Glue catalog access. It must also have
+      permission to manage CloudWatch log groups and streams. If not provided,
+      Cloud Formation will create an IAM profile on the Stack with minimal
+      necessary permissions.
+    Type: String
+    Default: ''
+  WorkersCount:
+    Description: >-
+      Number of dedicated Presto worker nodes (apart from coordinator) to
+      instantiate.
+    Type: Number
+    MinValue: 1
+  HACoordinatorsCount:
+    Description: >
+      Number of Presto coordinator nodes to instantiate. If more then one, then
+      Presto Coordinator will offer HA capabilities. Refer to the Starburst
+      documentation for more details.
+    Type: Number
+    Default: 1
+    MinValue: 1
+  KeepCoordinatorNode:
+    Description: >
+      (Debug only) Keep coordinator node running after Presto Coordinator
+      service fails.
+    Type: String
+    AllowedValues:
+      - 'no'
+      - 'yes'
+    Default: 'no'
+  LaunchSuperset:
+    Description: >
+      When enabled, Superset will be started on a an EC2 instance. Superset is a
+      modern, enterprise-ready business intelligence web application. Learn more
+      at https://superset.apache.org/
+    Type: String
+    AllowedValues:
+      - 'no'
+      - 'yes'
+    Default: 'no'
+  AllowExternalAccessOnHttp:
+    Description: >
+      Disabled by default, this is to disallow external access for security
+      purposes. When disabled, clients (CLI/JDBC/etc) can connect to Presto only
+      from machines in the AWS Subnet specified above. When enabled and
+      instances are assigned public IP, Presto endpoints will be available over
+      HTTP without authorization (unless eg. LDAP is configured via "Additional
+      Configuration").
+    Type: String
+    AllowedValues:
+      - 'no'
+      - 'yes'
+    Default: 'no'
+  AdditionalCoordinatorConfigurationURI:
+    Type: String
+    Description: >-
+      (Optional) URI of S3 zip file with additional Presto Coordinator
+      configuration (e.g: s3://bucket/path)
+    AllowedPattern: 's3:\/\/[^\/"]+\/[^"]+|^$'
+    Default: ''
+  AdditionalWorkersConfigurationURI:
+    Type: String
+    Description: >-
+      (Optional) URI of S3 zip file with additional Presto Worker configuration
+      (e.g: s3://bucket/path)
+    AllowedPattern: 's3:\/\/[^\/"]+\/[^"]+|^$'
+    Default: ''
+  BootstrapScriptURI:
+    Type: String
+    Description: >-
+      (Optional) URI of S3 bootstrap script file that will be run after Presto
+      is configured on nodes
+    AllowedPattern: 's3:\/\/[^\/"]+\/[^"]+|^$'
+    Default: ''
+  PrestoHttpPort:
+    Type: Number
+    Description: Presto HTTP port
+    Default: 8080
+  LicenseURI:
+    Type: String
+    Description: (Optional) URI of S3 Enterprise License file
+    AllowedPattern: 's3:\/\/[^\/"]+\/[^"]+|^$'
+    Default: ''
+  MetastoreType:
+    Type: String
+    Description: The type of Metastore to use for the Hive Connector
+    AllowedValues:
+      - None
+      - Standalone (ephemeral)
+      - AWS Glue Data Catalog
+      - External MySQL RDBMS
+      - External PostgreSQL RDBMS
+      - External Hive Metastore Service
+    Default: None
+  ExternalMetastoreHost:
+    Type: String
+    Description: The Hostname or IP address of the external Metastore resource.
+    Default: ''
+  ExternalMetastorePort:
+    Type: Number
+    Description: >-
+      The port of the external Metastore resource (if 0 is used then default
+      port for metastore type will be used)
+    MinValue: 0
+    Default: 0
+  ExternalRdbmsMetastoreUserName:
+    Type: String
+    Description: The user name when using an external RDBMS Metastore resource.
+    Default: ''
+  ExternalRdbmsMetastorePassword:
+    Type: String
+    Description: The password when using an external RDBMS Metastore resource.
+    NoEcho: 'true'
+    Default: ''
+  ExternalRdbmsMetastoreDatabaseName:
+    Type: String
+    Description: The database name when using an external RDBMS Metastore resource.
+    Default: ''
+  EnableRanger:
+    Type: String
+    Description: >
+      When enabled, Apache Ranger service is launched, which allows to configure
+      Role Base Access Control. Disabled by default. All other settings in this
+      sections are ignored if Ranger is disabled.
+    AllowedValues:
+      - 'no'
+      - 'yes'
+    Default: 'no'
+  RangerAdminPassword:
+    Type: String
+    Description: >
+      Admin password for Apache Ranger. At least 8 characters, including
+      lowercase, uppercase and digit are required. When reusing existing
+      external database for Ranger, you need to provide the same password as the
+      initial one.
+    AllowedPattern: '.{8,}|^$'
+    Default: ''
+  RangerBackendType:
+    Type: String
+    Description: >
+      Type of database backend used for Apache Ranger. You may use external
+      PostgreSQL database or built-in ephemeral PostgreSQL database (demo only,
+      do not use in production).
+    AllowedValues:
+      - Built-in PostgreSQL RDBMS
+      - External PostgreSQL RDBMS
+    Default: Built-in PostgreSQL RDBMS
+  ExternalRdbmsRangerHost:
+    Type: String
+    Description: Database hostname if using external Ranger database backend
+    Default: ''
+  ExternalRdbmsRangerPort:
+    Type: Number
+    Description: Database hostname port if using external Ranger database backend
+    Default: 5432
+    MinValue: 1
+  ExternalRdbmsRangerDatabaseName:
+    Type: String
+    Description: >-
+      Database name if using external Ranger database backend. Database must
+      already exist.
+    Default: ranger
+  ExternalRdbmsRangerUserName:
+    Type: String
+    Description: >
+      Admin database user name if using external Ranger database backend. User
+      must exist, must have full permissions to Ranger database and must have
+      CREATEROLE permissions granted. Additional user 'ranger' is created for
+      non-admin database access. If you specify 'ranger' here, Ranger will use
+      single admin user to access database.
+    Default: rangeradmin
+  ExternalRdbmsRangerPassword:
+    Type: String
+    Description: Password for admin user if using external Ranger database backend.
+    Default: ''
+  RangerConfigFile:
+    Type: String
+    Description: >
+      URL to optional additional Ranger config file in S3 bucket, required to
+      configure SSL or Solr Audit. Use template available at
+      https://starburstdata-cft-public.s3.us-east-2.amazonaws.com/1.0.0/ranger.template.properties
+      to create your configuration and upload it to S3 bucket of your choice.
+      Examples: s3://my-bucket/my-config_file.properties
+    AllowedPattern: 's3:\/\/[^\/"]+\/[^"]+|^$'
+    Default: ''
+  RangerBootstrapScript:
+    Type: String
+    Description: >
+      URL to optional Ranger bootstrap script in S3 bucket. This script is run
+      before Ranger starts. You may use it e.g. to provide your truststore
+      files. Examples: s3://my-bucket/ranger-bootstrap.sh
+    AllowedPattern: 's3:\/\/[^\/"]+\/[^"]+|^$'
+    Default: ''
+  EnableRangerUserSync:
+    Type: String
+    Description: >
+      When enabled Apache Ranger will sync users from external LDAP. Requires
+      Ranger to be enabled, disabled by default. All other settings in this
+      sections are ignored if Ranger user sync is disabled.
+    AllowedValues:
+      - 'no'
+      - 'yes'
+    Default: 'no'
+  RangerUserSyncConfigFile:
+    Type: String
+    Description: >
+      URL to Ranger usersync config file in S3 bucket, Use template available at
+      https://starburstdata-cft-public.s3.us-east-2.amazonaws.com/1.0.0/usersync.template.properties
+      to create your configuration and upload it to S3 bucket of your choice.
+      Required if Ranger usersync is enabled. Examples:
+      s3://my-bucket/my-config_file.properties
+    AllowedPattern: 's3:\/\/[^\/"]+\/[^"]+|^$'
+    Default: ''
+  S3Endpoint:
+    Type: String
+    Description: (Optional) The S3-compatible storage endpoint server.
+    Default: ''
+  S3AccessKey:
+    Type: String
+    Description: (Optional) The S3-compatible access key.
+    Default: ''
+  S3SecretKey:
+    Type: String
+    Description: (Optional) The S3-compatible secret key.
+    Default: ''
+  EnableCloudWatchMetrics:
+    Description: >
+      When enabled, metrics will be collected for Presto nodes and stored in
+      CloudWatch (additional CloudWatch fees are charged). Additionally, a
+      cluster CloudWatch Dashboard will also be created.
+    Type: String
+    AllowedValues:
+      - 'no'
+      - 'yes'
+    Default: 'no'
+  APIProxyEndpoint:
+    Type: String
+    Description: provide apirpocy endpoint dns entires
+    Default: 'vpce-0715de2f00e561add-pl5yvw99.execute-api.us-east-1.vpce.amazonaws.com'
+  MonitoringEndpoint:
+    Type: String
+    Description: provide apirpocy endpoint dns entires
+    Default: 'vpce-0bc85bd5c28885855-4tc9hszd.monitoring.us-east-1.vpce.amazonaws.com'
+  LogsEndpoint:
+    Type: String
+    Description: provide apirpocy endpoint dns entires
+    Default: 'vpce-036c1d1482f535943-uze16pro.logs.us-east-1.vpce.amazonaws.com'
+Conditions:
+  LaunchSuperset: !Equals 
+    - !Ref LaunchSuperset
+    - 'yes'
+  LaunchSupersetAndSelectedSubnetAutoAssignsPublicIp: !And 
+    - !Equals 
+      - !Ref LaunchSuperset
+      - 'yes'
+    - !Equals 
+      - !Ref SelectedSubnetAutoAssignsPublicIp
+      - 'yes'
+  LaunchMetastore: !Or 
+    - !Equals 
+      - !Ref MetastoreType
+      - Standalone (ephemeral)
+    - !Equals 
+      - !Ref MetastoreType
+      - External MySQL RDBMS
+    - !Equals 
+      - !Ref MetastoreType
+      - External PostgreSQL RDBMS
+  ExternalRdbmsMetastoreDefined: !Or 
+    - !Equals 
+      - !Ref MetastoreType
+      - External MySQL RDBMS
+    - !Equals 
+      - !Ref MetastoreType
+      - External PostgreSQL RDBMS
+  LaunchMetastoreDb: !Equals 
+    - !Ref MetastoreType
+    - Standalone (ephemeral)
+  ExternalMetastorePortDefined: !Not 
+    - !Equals 
+      - !Ref ExternalMetastorePort
+      - '0'
+  UseExternalHiveMetastore: !Equals 
+    - !Ref MetastoreType
+    - External Hive Metastore Service
+  UseGlueMetastore: !Equals 
+    - !Ref MetastoreType
+    - AWS Glue Data Catalog
+  UseExternalMysqlMetastore: !Equals 
+    - !Ref MetastoreType
+    - External MySQL RDBMS
+  UseExternalPostgresMetastore: !Equals 
+    - !Ref MetastoreType
+    - External PostgreSQL RDBMS
+  LaunchRanger: !Equals 
+    - !Ref EnableRanger
+    - 'yes'
+  LaunchRangerAndSelectedSubnetAutoAssignsPublicIp: !And 
+    - !Equals 
+      - !Ref EnableRanger
+      - 'yes'
+    - !Equals 
+      - !Ref SelectedSubnetAutoAssignsPublicIp
+      - 'yes'
+  UseExternalRdbmsRanger: !Equals 
+    - !Ref RangerBackendType
+    - External PostgreSQL RDBMS
+  LaunchRangerUserSync: !And 
+    - !Equals 
+      - !Ref EnableRanger
+      - 'yes'
+    - !Equals 
+      - !Ref EnableRangerUserSync
+      - 'yes'
+  CreateIamInstanceProfile: !Equals 
+    - !Ref IamInstanceProfile
+    - ''
+  CreateVPCEndpoints: !Equals 
+    - !Ref SelectedSubnetAutoAssignsPublicIp
+    - 'no'
+  S3EndpointDefined: !Not 
+    - !Equals 
+      - !Ref S3Endpoint
+      - ''
+  EnableCloudWatchMetrics: !Equals 
+    - !Ref EnableCloudWatchMetrics
+    - 'yes'
+Resources:
+  PrestoPlacementGroup:
+    Type: 'AWS::EC2::PlacementGroup'
+  PrestoSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: Presto nodes security group
+      VpcId: !Ref VPC
+  # EndpointSecurityGroup:
+  #   Type: 'AWS::EC2::SecurityGroup'
+  #   Condition: CreateVPCEndpoints
+  #   Properties:
+  #     GroupDescription: Endpoint security group
+  #     VpcId: !Ref VPC
+  PrestoOutboundRule:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Properties:
+      IpProtocol: tcp
+      FromPort: !Ref PrestoHttpPort
+      ToPort: !Ref PrestoHttpPort
+      DestinationSecurityGroupId: !GetAtt PrestoSecurityGroup.GroupId
+      GroupId: !GetAtt PrestoSecurityGroup.GroupId
+  PrestoInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Properties:
+      IpProtocol: tcp
+      FromPort: !Ref PrestoHttpPort
+      ToPort: !Ref PrestoHttpPort
+      SourceSecurityGroupId: !GetAtt PrestoSecurityGroup.GroupId
+      GroupId: !GetAtt PrestoSecurityGroup.GroupId
+  MetastorePrestoOutboundRule:
+    Type: 'AWS::EC2::SecurityGroupEgress'
+    Condition: LaunchMetastore
+    Properties:
+      IpProtocol: tcp
+      FromPort: 9083
+      ToPort: 9083
+      DestinationSecurityGroupId: !GetAtt PrestoSecurityGroup.GroupId
+      GroupId: !GetAtt PrestoSecurityGroup.GroupId
+  MetastorePrestoInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: LaunchMetastore
+    Properties:
+      IpProtocol: tcp
+      FromPort: 9083
+      ToPort: 9083
+      SourceSecurityGroupId: !GetAtt PrestoSecurityGroup.GroupId
+      GroupId: !GetAtt PrestoSecurityGroup.GroupId
+  RangerPrestoInboundRule:
+    Type: 'AWS::EC2::SecurityGroupIngress'
+    Condition: LaunchRanger
+    Properties:
+      IpProtocol: tcp
+      FromPort: 6080
+      ToPort: 6080
+      SourceSecurityGroupId: !GetAtt PrestoSecurityGroup.GroupId
+      GroupId: !GetAtt PrestoSecurityGroup.GroupId
+  # EndpointOutboundRule:
+  #   Type: 'AWS::EC2::SecurityGroupEgress'
+  #   Condition: CreateVPCEndpoints
+  #   Properties:
+  #     IpProtocol: tcp
+  #     FromPort: 443
+  #     ToPort: 443
+  #     DestinationSecurityGroupId: !GetAtt EndpointSecurityGroup.GroupId
+  #     GroupId: !GetAtt PrestoSecurityGroup.GroupId
+  # EndpointInboundRule:
+  #   Type: 'AWS::EC2::SecurityGroupIngress'
+  #   Condition: CreateVPCEndpoints
+  #   Properties:
+  #     IpProtocol: tcp
+  #     FromPort: 443
+  #     ToPort: 443
+  #     SourceSecurityGroupId: !GetAtt PrestoSecurityGroup.GroupId
+  #     GroupId: !GetAtt EndpointSecurityGroup.GroupId
+  OnStackCreateLambda:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: index.handle_on_stack_create
+      Role: !GetAtt PrestoMonitoringLambdaIAMRole.Arn
+      Code:
+        ZipFile: >
+          import cfnresponse
+
+          # LAMBDA-ON-STACK-CREATE-BEGIN
+
+          import zlib, base64
+
+          exec(zlib.decompress(base64.b64decode('eJzNVU1v2zgQvftXsLpQRl0hu70ZUIHWcYpi23RRJ+0hMARGGilEZVIlR5sUhv/7zlCS49hu2vTUi01qZt48zqdeNdahuLZoX450d6ltVWlTDde8NA58Y42H4RPq1f3ZqRyuVf51VDq7Cki5dZDk1pS6Er3WLNxGPXRSAb6nI7h4nHg6w39Qx4PwdP7m8u34iG4UaEZHTN6dn30cj/LatkV2qzC/SYNqktcaDMYySIJATjpiaccodoBOg0/XcqXuMoUIqwa9nP59shkHDn4Pij89DaSAUtwoU9SQWZN5pFhluQOFENMjDDIYwh2OpyOBqsrIQ1Y52zZxL5gEtSv5CbxtXQ7/OtuAQ/Iol1dywYDnagVyOR4NyUu0KW1cRiQkRVOJW403IuBMxTr8b5KI9HUptujfWvB48b0hpGepnAWKkkg9BI3OrVA5amuEIxPtoAhIu4VCGTLFw9dNdsWLy9lsvlhM1pvxPnwZ0TPbGsX6iMFGEDCVK71YoBWzs0RQMHKAgu0DC8pF68xoiLiqlVtx0HGIvkOK7MPA76bolww4U+47hybIM26IzAOJC5/yJeGfmPlwRdwqjVuxpip6NKEf1N0XMlh0+iGr4vZG1yCMpXa01tFrFVrXc60cgOkgmZjgnLL7IrMtxocEJ/uUOqun5O/s9bv389PJOjpVqKJpdMHuBLkTjMv1VlpHTb+lKl4zVc4ZZ0cEykkUsn+ff3DOUpf/HphgTpef5sLryqh6KMr7gjios0NE7QVXs/jS+e0RQj59DdDEf538MYUOdzk0KObhj5pxt09h+EhOtgpUQ2C6KueYhjkk+vI+Fr0JoWTMNL1wLTzx3XsFsl0SCaVypTAj7Hi86RrvpxU9oKY7Az4pwOdOX/cN6+OQQR6DPr16tL22inK57AYgt9Xgg9qPh3ketEj/YPyVUVcrcv2rXjYyeChta4rdGSXOVE079Th897wus2L9I3ZXJ8sNI/aAj6iFPYHwWdUtUUpT+fEfGaL/5EnR+9qZcq8OLZ/vW3a+jm63biMaihXD835NHirS6S0fOJxpb5VsxcFyQha8f5nJdes8FlR3U11QhnSpcxXi6GxN+0w2FCa0026R71n0skDpBQPL6T09qtf/Ae/eTrk=')))
+
+          # Created by pyminifier (https://github.com/liftoff/pyminifier)
+
+          # LAMBDA-ON-STACK-CREATE-END
+      Runtime: python3.6
+      Timeout: 900
+      ReservedConcurrentExecutions: 1
+  OnStackStartupCoordinatorAvailableCheckHook:
+    Type: 'AWS::CloudFormation::CustomResource'
+    Properties:
+      ServiceToken: !GetAtt OnStackCreateLambda.Arn
+      AlarmName: !Ref CooordinatorDownAlarm
+      StackName: !Sub '${AWS::StackName}'
+      MaxWaitSeconds: 830
+  PrestoClusterIAMRole:
+    Type: 'AWS::IAM::Role'
+    Condition: CreateIamInstanceProfile
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - apigateway.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: presto-cf
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cloudformation:SignalResource'
+                  - 'elasticmapreduce:DescribeCluster'
+                  - 'cloudwatch:DeleteAlarms'
+                  - 'cloudwatch:DeleteDashboards'
+                  - 'cloudwatch:DeleteInsightRules'
+                  - 'cloudwatch:DescribeAlarmHistory'
+                  - 'cloudwatch:DescribeAlarms'
+                  - 'cloudwatch:DisableAlarmActions'
+                  - 'cloudwatch:DisableInsightRules'
+                  - 'cloudwatch:EnableAlarmActions'
+                  - 'cloudwatch:EnableInsightRules'
+                  - 'cloudwatch:GetDashboard'
+                  - 'cloudwatch:GetInsightRuleReport'
+                  - 'cloudwatch:ListTagsForResource'
+                  - 'cloudwatch:PutDashboard'
+                  - 'cloudwatch:PutInsightRule'
+                  - 'cloudwatch:PutMetricAlarm'
+                  - 'cloudwatch:SetAlarmState'
+                  - 'cloudwatch:TagResource'
+                  - 'cloudwatch:UntagResource'
+                  - 'iam:PassRole'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                  - 's3:PutObject'
+                  - 'sqs:ChangeMessageVisibility'
+                  - 'sqs:DeleteMessage'
+                  - 'sqs:GetQueueUrl'
+                  - 'sqs:ReceiveMessage'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:PutRetentionPolicy'
+                  - 'logs:DescribeLogGroups'
+                  - 'logs:DescribeLogStreams'
+                Resource:
+                  - !Sub 'arn:aws:sqs:${AWS::Region}:${AWS::AccountId}:*'
+                  - !Sub >-
+                    arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*
+                  - !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:*'
+                  - !Sub 'arn:aws:cloudwatch::${AWS::AccountId}:dashboard/*'
+                  - !Sub >-
+                    arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:insight-rule/*
+                  - !Sub 'arn:aws:iam::${AWS::AccountId}:role/*'
+                  - !Sub >-
+                    arn:aws:elasticmapreduce:${AWS::Region}:${AWS::AccountId}:cluster/*
+                  - !Sub 'arn:aws:s3:::*'
+                  - !Sub 'arn:aws:s3:::*/*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
+              - Effect: Allow
+                Action:
+                  - 'autoscaling:CompleteLifecycleAction'
+                  - 'autoscaling:RecordLifecycleActionHeartbeat'
+                  - 'ec2:DescribeInstances'
+                  - 'elasticmapreduce:RunJobFlow'
+                  - 'cloudwatch:PutMetricData'
+                  - 'cloudwatch:DeleteAnomalyDetector'
+                  - 'cloudwatch:DescribeAlarmsForMetric'
+                  - 'cloudwatch:DescribeAnomalyDetectors'
+                  - 'cloudwatch:DescribeInsightRules'
+                  - 'cloudwatch:GetMetricData'
+                  - 'cloudwatch:GetMetricStatistics'
+                  - 'cloudwatch:GetMetricWidgetImage'
+                  - 'cloudwatch:ListDashboards'
+                  - 'cloudwatch:ListMetrics'
+                  - 'cloudwatch:PutAnomalyDetector'
+                  - 'cloudwatch:PutAnomalyDetector'
+                  - 'glue:BatchGetPartition'
+                  - 'glue:BatchCreatePartition'
+                  - 'glue:CreateDatabase'
+                  - 'glue:CreateTable'
+                  - 'glue:DeleteDatabase'
+                  - 'glue:DeletePartition'
+                  - 'glue:DeleteTable'
+                  - 'glue:GetDatabase'
+                  - 'glue:GetDatabases'
+                  - 'glue:GetPartition'
+                  - 'glue:GetPartitions'
+                  - 'glue:GetTable'
+                  - 'glue:GetTables'
+                  - 'glue:UpdateTable'
+                  - 'glue:UpdatePartition'
+                Resource:
+                  - '*'
+  PrestoMonitoringLambdaIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: presto-cf-lambda
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ec2:CreateTags'
+                  - 'ec2:DeleteTags'
+                  - 'cloudwatch:DescribeAlarms'
+                  - 'cloudformation:SignalResource'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                  - 'logs:TagLogGroup'
+                Resource:
+                  - !Sub 'arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:*'
+                  - !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:*'
+                  - !Sub >-
+                    arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/*
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
+              - Effect: Allow
+                Action:
+                  - 'ec2:DescribeInstances'
+                  - 'ec2:TerminateInstances'
+                  - 'ec2:AttachNetworkInterface'
+                  - 'ec2:DetachNetworkInterface'
+                  - 'ec2:DescribeNetworkInterfaceAttribute'
+                  - 'cloudwatch:PutMetricData'
+                Resource:
+                  - '*'
+  PrestoClusterInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Condition: CreateIamInstanceProfile
+    Properties:
+      Roles:
+        - Ref: PrestoClusterIAMRole
+  # MonitoringEndpoint:
+  #   Type: 'AWS::EC2::VPCEndpoint'
+  #   Condition: CreateVPCEndpoints
+  #   Properties:
+  #     VpcEndpointType: Interface
+  #     ServiceName: !Sub 'com.amazonaws.${AWS::Region}.monitoring'
+  #     PrivateDnsEnabled: false
+  #     VpcId: !Ref VPC
+  #     SecurityGroupIds:
+  #       - !Ref EndpointSecurityGroup
+  #     SubnetIds:
+  #       - !Ref Subnet
+  # APIProxyEndpoint:
+  #   Type: 'AWS::EC2::VPCEndpoint'
+  #   Condition: CreateVPCEndpoints
+  #   Properties:
+  #     VpcEndpointType: Interface
+  #     ServiceName: !Sub 'com.amazonaws.${AWS::Region}.execute-api'
+  #     PrivateDnsEnabled: false
+  #     VpcId: !Ref VPC
+  #     SecurityGroupIds:
+  #       - !Ref EndpointSecurityGroup
+  #     SubnetIds:
+  #       - !Ref Subnet
+  AWSProxyRestAPI:
+    Type: 'AWS::ApiGateway::RestApi'
+    Condition: CreateVPCEndpoints
+    Properties:
+      EndpointConfiguration:
+        Types:
+          - PRIVATE
+      Policy: !Sub |
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": "*",
+              "Action": "execute-api:Invoke",
+              "Resource": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*"
+            },
+            {
+              "Effect": "Deny",
+              "Principal": "*",
+              "Action": "execute-api:Invoke",
+              "Resource": "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*",
+              "Condition": {
+                "StringNotEquals": {
+                  "aws:SourceVpce": "${APIProxyEndpoint}"
+                }
+              }
+            }
+          ]
+        }
+      Name: !Sub '${AWS::StackName}-presto-aws-proxy'
+      Description: Presto AWS Proxy API
+  CFTProxyResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Condition: CreateVPCEndpoints
+    Properties:
+      ParentId: !GetAtt AWSProxyRestAPI.RootResourceId
+      PathPart: cloudformation-proxy
+      RestApiId: !Ref AWSProxyRestAPI
+  CFTProxyMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Condition: CreateVPCEndpoints
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      MethodResponses:
+        - StatusCode: '200'
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:cloudformation:path//'
+        Credentials: !If 
+          - CreateIamInstanceProfile
+          - !GetAtt PrestoClusterIAMRole.Arn
+          - !Sub 'arn:aws:iam::${AWS::AccountId}:role/${IamInstanceProfile}'
+        RequestParameters:
+          integration.request.header.Content-Type: '''application/x-www-form-urlencoded'''
+        IntegrationResponses:
+          - StatusCode: '200'
+      RestApiId: !Ref AWSProxyRestAPI
+      ResourceId: !Ref CFTProxyResource
+  EC2ProxyResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Condition: CreateVPCEndpoints
+    Properties:
+      ParentId: !GetAtt AWSProxyRestAPI.RootResourceId
+      PathPart: ec2-proxy
+      RestApiId: !Ref AWSProxyRestAPI
+  EC2ProxyMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Condition: CreateVPCEndpoints
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      MethodResponses:
+        - StatusCode: '200'
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:ec2:path//'
+        Credentials: !If 
+          - CreateIamInstanceProfile
+          - !GetAtt PrestoClusterIAMRole.Arn
+          - !Sub 'arn:aws:iam::${AWS::AccountId}:role/${IamInstanceProfile}'
+        RequestParameters:
+          integration.request.header.Content-Type: '''application/x-www-form-urlencoded'''
+        IntegrationResponses:
+          - StatusCode: '200'
+      RestApiId: !Ref AWSProxyRestAPI
+      ResourceId: !Ref EC2ProxyResource
+  SQSProxyResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Condition: CreateVPCEndpoints
+    Properties:
+      ParentId: !GetAtt AWSProxyRestAPI.RootResourceId
+      PathPart: sqs-proxy
+      RestApiId: !Ref AWSProxyRestAPI
+  SQSProxyMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Condition: CreateVPCEndpoints
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      MethodResponses:
+        - StatusCode: '200'
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:sqs:path//'
+        Credentials: !If 
+          - CreateIamInstanceProfile
+          - !GetAtt PrestoClusterIAMRole.Arn
+          - !Sub 'arn:aws:iam::${AWS::AccountId}:role/${IamInstanceProfile}'
+        RequestParameters:
+          integration.request.header.Content-Type: '''application/x-www-form-urlencoded'''
+        IntegrationResponses:
+          - StatusCode: '200'
+      RestApiId: !Ref AWSProxyRestAPI
+      ResourceId: !Ref SQSProxyResource
+  AutoscalingProxyResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Condition: CreateVPCEndpoints
+    Properties:
+      ParentId: !GetAtt AWSProxyRestAPI.RootResourceId
+      PathPart: autoscaling-proxy
+      RestApiId: !Ref AWSProxyRestAPI
+  AutoscalingProxyMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Condition: CreateVPCEndpoints
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      MethodResponses:
+        - StatusCode: '200'
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:autoscaling:path//'
+        Credentials: !If 
+          - CreateIamInstanceProfile
+          - !GetAtt PrestoClusterIAMRole.Arn
+          - !Sub 'arn:aws:iam::${AWS::AccountId}:role/${IamInstanceProfile}'
+        RequestParameters:
+          integration.request.header.Content-Type: '''application/x-www-form-urlencoded'''
+        IntegrationResponses:
+          - StatusCode: '200'
+      RestApiId: !Ref AWSProxyRestAPI
+      ResourceId: !Ref AutoscalingProxyResource
+  GlueProxyResource:
+    Type: 'AWS::ApiGateway::Resource'
+    Condition: CreateVPCEndpoints
+    Properties:
+      ParentId: !GetAtt AWSProxyRestAPI.RootResourceId
+      PathPart: glue-proxy
+      RestApiId: !Ref AWSProxyRestAPI
+  GlueProxyMethod:
+    Type: 'AWS::ApiGateway::Method'
+    Condition: CreateVPCEndpoints
+    Properties:
+      AuthorizationType: NONE
+      HttpMethod: POST
+      RequestParameters:
+        method.request.header.X-Starburst-Amz-Target-Proxy: true
+      MethodResponses:
+        - StatusCode: '200'
+        - StatusCode: '400'
+        - StatusCode: '500'
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:glue:path//'
+        Credentials: !If 
+          - CreateIamInstanceProfile
+          - !GetAtt PrestoClusterIAMRole.Arn
+          - !Sub 'arn:aws:iam::${AWS::AccountId}:role/${IamInstanceProfile}'
+        RequestParameters:
+          integration.request.header.Content-Type: '''application/x-amz-json-1.1'''
+          integration.request.header.X-Amz-Target: method.request.header.X-Starburst-Amz-Target-Proxy
+        IntegrationResponses:
+          - StatusCode: '200'
+            SelectionPattern: '2\d{2}'
+          - StatusCode: '400'
+            SelectionPattern: '4\d{2}'
+          - StatusCode: '500'
+            SelectionPattern: '5\d{2}'
+      RestApiId: !Ref AWSProxyRestAPI
+      ResourceId: !Ref GlueProxyResource
+  AWSProxyDeployment:
+    DependsOn:
+      - SQSProxyMethod
+      - AutoscalingProxyMethod
+      - CFTProxyMethod
+      - EC2ProxyMethod
+      - GlueProxyMethod
+    Condition: CreateVPCEndpoints
+    Type: 'AWS::ApiGateway::Deployment'
+    Properties:
+      RestApiId: !Ref AWSProxyRestAPI
+      Description: !Sub '${AWS::StackName}-presto-aws-proxy-deployment'
+      StageName: aws-proxy
+  # LogsEndpoint:
+  #   Type: 'AWS::EC2::VPCEndpoint'
+  #   Condition: CreateVPCEndpoints
+  #   Properties:
+  #     VpcEndpointType: Interface
+  #     ServiceName: !Sub 'com.amazonaws.${AWS::Region}.logs'
+  #     PrivateDnsEnabled: false
+  #     VpcId: !Ref VPC
+  #     SecurityGroupIds:
+  #       - !Ref EndpointSecurityGroup
+  #     SubnetIds:
+  #       - !Ref Subnet
+  CoordinatorENI:
+    Type: 'AWS::EC2::NetworkInterface'
+    DependsOn: PrestoPlacementGroup
+    Properties:
+      Description: !Sub '${AWS::StackName} coordinator ENI'
+      GroupSet: !Split 
+        - ','
+        - !Join 
+          - ','
+          - - !GetAtt PrestoSecurityGroup.GroupId
+            - !Join 
+              - ','
+              - !Ref SecurityGroups
+      SubnetId: !Ref Subnet
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName} Coordinator ENI'
+        - Key: 'starburstdata:identification:role'
+          Value: 'presto:coordinator-eni'
+  Coordinator:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      InstanceType: !Ref CoordinatorInstanceType
+      ImageId: !FindInMap 
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - id
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !If 
+        - CreateIamInstanceProfile
+        - !Ref PrestoClusterInstanceProfile
+        - !Ref IamInstanceProfile
+      SecurityGroups: !Split 
+        - ','
+        - !Join 
+          - ','
+          - - !GetAtt PrestoSecurityGroup.GroupId
+            - !Join 
+              - ','
+              - !Ref SecurityGroups
+      UserData: !Base64 
+        'Fn::Sub':
+          - |-
+            {
+              "cft_configure": {
+                "coordinator": true
+                , "worker": false
+                , "presto_http_allow_external": "${AllowExternalAccessOnHttp}"
+                , "coordinator_address": "${CoordinatorENI.PrimaryPrivateIpAddress}"
+                , "presto_http_port": ${PrestoHttpPort}
+                , "additional_configuration_uri": "${AdditionalCoordinatorConfigurationURI}"
+                , "bootstrap_script_uri": "${BootstrapScriptURI}"
+                , "license_uri": "${LicenseURI}"
+                , "graceful_shutdown_queue": "${GracefulNodeShutdownQueue.QueueName}"
+                , "region": "${AWS::Region}"
+                , "cf_stack": "${AWS::StackName}"
+                , "cf_resource": "Coordinators"
+                , "log_group": "${PrestoLogGroup}"
+                , "cloudwatch_metrics": "${EnableCloudWatchMetrics}"
+                , "heartbeat_interval_seconds": "2"
+                , "keep_coordinator_node": "${KeepCoordinatorNode}"
+                ${HiveMetastore}
+                ${Ranger}
+                ${PrivateSubnetEndpoints}
+                ${S3}
+              }
+            }
+          - PrestoLogGroup: !Sub '/starburstdata/presto/${AWS::StackName}'
+            PrivateSubnetEndpoints: !If 
+              - CreateVPCEndpoints
+              - !Sub 
+                - |-
+                  , "api_proxy_endpoint_dns_entries": "${APIProxyDnsEntries}"
+                  , "aws_proxy_api_id": "${AWSProxyRestAPI}"
+                  , "aws_proxy_deployment": "${AWSProxyDeployment}"
+                  , "logs_endpoint_dns_entries": "${LogsDnsEntries}"
+                  , "monitoring_endpoint_dns_entries": "${MonitoringDnsEntries}"
+                - APIProxyDnsEntries: !Join 
+                    - ','
+                    - !GetAtt APIProxyEndpoint.DnsEntries
+                  LogsDnsEntries: !Join 
+                    - ','
+                    - !GetAtt LogsEndpoint.DnsEntries
+                  MonitoringDnsEntries: !Join 
+                    - ','
+                    - !GetAtt MonitoringEndpoint.DnsEntries
+              - ''
+            HiveMetastore: !If 
+              - LaunchMetastore
+              - !Sub |
+                , "hive_metastore_uri": "thrift://${Metastore.PrivateIp}:9083"
+              - !If 
+                - UseExternalHiveMetastore
+                - !Sub 
+                  - >-
+                    , "hive_metastore_uri":
+                    "thrift://${ExternalMetastoreHost}:${Port}"
+                  - Port: !If 
+                      - ExternalMetastorePortDefined
+                      - !Ref ExternalMetastorePort
+                      - '9083'
+                - !If 
+                  - UseGlueMetastore
+                  - ', "hive_use_glue_metastore": true'
+                  - ''
+            Ranger: !If 
+              - LaunchRanger
+              - !Sub >
+                , "ranger.service-name": "starburst-presto"
+
+                , "ranger.policy-rest-url":
+                "http://${Ranger.PrivateDnsName}:6080"
+
+                , "ranger.policy-refresh-interval": "10s"
+
+                , "ranger.presto-admin-user": "admin"
+
+                , "ranger.presto-admin-password": "${RangerAdminPassword}"
+              - ''
+            S3: !If 
+              - S3EndpointDefined
+              - !Sub |
+                , "s3_endpoint": "${S3Endpoint}"
+                , "s3_access_key": "${S3AccessKey}"
+                , "s3_secret_key": "${S3SecretKey}"
+              - ''
+  Coordinators:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+        Count: !Ref HACoordinatorsCount
+    Properties:
+      LaunchConfigurationName: !Ref Coordinator
+      VPCZoneIdentifier:
+        - !Ref Subnet
+      MinSize: !Ref HACoordinatorsCount
+      MaxSize: !Ref HACoordinatorsCount
+      DesiredCapacity: !Ref HACoordinatorsCount
+      PlacementGroup: !Ref PrestoPlacementGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Presto Coordinator'
+          PropagateAtLaunch: true
+        - Key: 'starburstdata:identification:role'
+          Value: 'presto:coordinator'
+          PropagateAtLaunch: true
+  GracefulNodeShutdownQueue:
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      VisibilityTimeout: 250
+  Worker:
+    Type: 'AWS::AutoScaling::LaunchConfiguration'
+    Properties:
+      InstanceType: !Ref WorkersInstanceType
+      ImageId: !FindInMap 
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - id
+      KeyName: !Ref KeyName
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeType: gp2
+            VolumeSize: 16
+      IamInstanceProfile: !If 
+        - CreateIamInstanceProfile
+        - !GetAtt PrestoClusterInstanceProfile.Arn
+        - !Ref IamInstanceProfile
+      SecurityGroups: !Split 
+        - ','
+        - !Join 
+          - ','
+          - - !GetAtt PrestoSecurityGroup.GroupId
+            - !Join 
+              - ','
+              - !Ref SecurityGroups
+      UserData: !Base64 
+        'Fn::Sub':
+          - |-
+            {
+              "cft_configure": {
+                "coordinator": false
+                , "worker": true
+                , "presto_http_allow_external": "${AllowExternalAccessOnHttp}"
+                , "coordinator_address": "${CoordinatorENI.PrimaryPrivateIpAddress}"
+                , "presto_http_port": ${PrestoHttpPort}
+                , "additional_configuration_uri": "${AdditionalWorkersConfigurationURI}"
+                , "bootstrap_script_uri": "${BootstrapScriptURI}"
+                , "license_uri": "${LicenseURI}"
+                , "region": "${AWS::Region}"
+                , "cf_stack": "${AWS::StackName}"
+                , "cf_resource": "Workers"
+                , "log_group": "${PrestoLogGroup}"
+                , "cloudwatch_metrics": "${EnableCloudWatchMetrics}"
+                ${PrivateSubnetEndpoints}
+                ${HiveMetastore}
+                ${S3}
+              }
+            }
+          - PrestoLogGroup: !Sub '/starburstdata/presto/${AWS::StackName}'
+            HiveMetastore: !If 
+              - LaunchMetastore
+              - !Sub |
+                , "hive_metastore_uri": "thrift://${Metastore.PrivateIp}:9083"
+              - !If 
+                - UseExternalHiveMetastore
+                - !Sub 
+                  - >-
+                    , "hive_metastore_uri":
+                    "thrift://${ExternalMetastoreHost}:${Port}"
+                  - Port: !If 
+                      - ExternalMetastorePortDefined
+                      - !Ref ExternalMetastorePort
+                      - '9083'
+                - !If 
+                  - UseGlueMetastore
+                  - ', "hive_use_glue_metastore": true'
+                  - ''
+            PrivateSubnetEndpoints: !If 
+              - CreateVPCEndpoints
+              - !Sub 
+                - |-
+                  , "api_proxy_endpoint_dns_entries": "${APIProxyDnsEntries}"
+                  , "aws_proxy_api_id": "${AWSProxyRestAPI}"
+                  , "aws_proxy_deployment": "${AWSProxyDeployment}"
+                  , "logs_endpoint_dns_entries": "${LogsDnsEntries}"
+                  , "monitoring_endpoint_dns_entries": "${MonitoringDnsEntries}"
+                - APIProxyDnsEntries: !Join 
+                    - ','
+                    - !GetAtt APIProxyEndpoint.DnsEntries
+                  LogsDnsEntries: !Join 
+                    - ','
+                    - !GetAtt LogsEndpoint.DnsEntries
+                  MonitoringDnsEntries: !Join 
+                    - ','
+                    - !GetAtt MonitoringEndpoint.DnsEntries
+              - ''
+            S3: !If 
+              - S3EndpointDefined
+              - !Sub |
+                , "s3_endpoint": "${S3Endpoint}"
+                , "s3_access_key": "${S3AccessKey}"
+                , "s3_secret_key": "${S3SecretKey}"
+              - ''
+  PrestoAutoScalingIAMRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - autoscaling.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AutoScalingNotificationAccessRole'
+  Workers:
+    Type: 'AWS::AutoScaling::AutoScalingGroup'
+    UpdatePolicy:
+      AutoScalingReplacingUpdate:
+        WillReplace: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+        Count: !Ref WorkersCount
+    Properties:
+      LaunchConfigurationName: !Ref Worker
+      VPCZoneIdentifier:
+        - !Ref Subnet
+      MinSize: !Ref WorkersCount
+      MaxSize: !Ref WorkersCount
+      DesiredCapacity: !Ref WorkersCount
+      PlacementGroup: !Ref PrestoPlacementGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Presto Worker'
+          PropagateAtLaunch: true
+        - Key: 'starburstdata:identification:role'
+          Value: 'presto:worker'
+          PropagateAtLaunch: true
+  GracefulPrestoNodeShutdownHook:
+    Type: 'AWS::AutoScaling::LifecycleHook'
+    Properties:
+      AutoScalingGroupName: !Ref Workers
+      LifecycleTransition: 'autoscaling:EC2_INSTANCE_TERMINATING'
+      NotificationTargetARN: !GetAtt GracefulNodeShutdownQueue.Arn
+      RoleARN: !GetAtt PrestoAutoScalingIAMRole.Arn
+  CoordinatorHeartbeatZeroSignal:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: index.coordinator_zero_signal_loop
+      Role: !GetAtt PrestoMonitoringLambdaIAMRole.Arn
+      Code:
+        ZipFile: >
+          # LAMBDA-COORDINATOR-ZERO-SIGNAL-BEGIN
+
+          import zlib, base64
+
+          exec(zlib.decompress(base64.b64decode('eJyVVG1P3DgQ/p5fYa10ctJLo1C+RUoltOz1VoIF7QKtiirLm0yCj8TO2Q7QIv57x06yvAh6108ee2aemXlmPKLtlLZkq6zaD8RwaVRdC1lPV2UmyYoWgkqr1tsXSkNSKFmJmowGc38LRoCkBnuEIugwSgzKcANNOCmXq79OoldMZxP27Hed9n/bw5dwA7LEs0w0/NuDsSbpeHHNazBJr5tGbPddlRIKK5TslGpeC/P5YL1arj5FwcHp6frkC1t8WczPz5YnK3Z4vj7wwvEm/5CmQQkVKZTSpZDcKs1+gFbMiFryhjVKdSHiShtjSAt3NsqCqR+JkJUKq9kRb7clJ8ZybaEkt8JeEe+TkXt/PsyigFheI1zNaq36LhzRYq+/pEXF0L24pt/Q0jQAHSt7zV2BzAAalyYX0obKJCBvhFbykh4vztbL+YYtV2eL9cXBEdss5ierw43HeKOgfP74/jdgvlvg9ivqN149lOqSFcU16DwNyO2VaIBcu4x0LyWWvcv99TwdQcTq7+54K42k67eNMFesBatFEWJEAncFdJYs/IF43n9iGqZXpHtnMeY2YqEZGeCSWYz2zHUnP9M9OPQJqIRtX4czgzK6DvbEYNGJ6xER1Vj6H3tpnqfPcvDdnm1wOF0o6sqhI4IZvAfXP/M9L7eQeIbCN3jyg/f6VPhZYJK3MI6byf1/SopGYK4hdU80GlTJcwyUPjlhhd75CJjs1B40Rg+T31M3sdteG1tyyzNRIrSoROHTzLRqgGa00/gDVeYDxi88Rp3P9r0Dptlj5g9RUDTcGPIfI6e2/+BPdnU6Phi2TVjGQgNNFQ/LzE+UuyeMDS/5cDx5blRfsltui6sXTHmNV9ARLh+WYqhd68Dx0PI7xq2FtrOGZh/Shygasnkxpi7Ys2Qeo+JE29GMOW5CR7/BvQU5PfU00fjYqw9Rm1/e0+G28qzRHTHI8SFOjjTYAswF7UaLAWTj6PUvMb3gTe8Yf0rM003yEH/bGaVJGtNzZBaR5qqXLs4GG4JLdQ1GNb1rOc320GeYy//x4R0TyGGvJZnGDLc509By4dyY+wLYTtYKXNomjN4/93+3l6bpx1+t5+AnIPeG7A==')))
+
+          # Created by pyminifier (https://github.com/liftoff/pyminifier)
+
+          # LAMBDA-COORDINATOR-ZERO-SIGNAL-END
+      Runtime: python3.6
+      Timeout: 60
+      Environment:
+        Variables:
+          METRICS_INTERVAL_SECONDS: '2'
+  CoordinatorHeartbeatZeroSignalTriggerRule:
+    Type: 'AWS::Events::Rule'
+    DependsOn: Coordinators
+    Properties:
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CoordinatorHeartbeatZeroSignal.Arn
+          Id: CoordinatorHeartbeatZeroSignalLambda
+          Input: !Sub |
+            {
+              "cf_stack": "${AWS::StackName}"
+            }
+  PermissionForEventsToInvokeCoordinatorHeartbeatZeroSignalLambda:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName:
+        Ref: CoordinatorHeartbeatZeroSignal
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CoordinatorHeartbeatZeroSignalTriggerRule.Arn
+  CooordinatorDownAlarm:
+    Type: 'AWS::CloudWatch::Alarm'
+    Properties:
+      ActionsEnabled: false
+      AlarmDescription: Alarm triggered in the event of a Presto Coordinator being down.
+      Dimensions:
+        - Name: PrestoStackName
+          Value: !Sub '${AWS::StackName}'
+      MetricName: Heartbeat
+      Namespace: Presto
+      EvaluationPeriods: 2
+      Period: 10
+      Statistic: Sum
+      ComparisonOperator: LessThanThreshold
+      Threshold: 1
+      TreatMissingData: missing
+      Unit: Count
+  CoordinatorFailoverIfNecessary:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Handler: index.coordinator_failover_if_necessary
+      Role: !GetAtt PrestoMonitoringLambdaIAMRole.Arn
+      Code:
+        ZipFile: >
+          # LAMBDA-COORDINATOR-FAILOVER-BEGIN
+
+          import zlib, base64
+
+          exec(zlib.decompress(base64.b64decode('eJytWN1v6jgWf+evsHhJ2GWizr0PK6HJSAyld9D2QkW5d0ZCKDKJQ70NMWs7pd2K/33PceJ8Edrb3XkBO/b59Dm/c2y+PwipSSJ2O57uejyfCmVHmu9ZL5ZiTyKqGc5IsWLnQ/z5j0jzQcQSTS3xVmjxOafGYSgk80KRxnxnmUzMrFeI93ZM38KQSXfgKRizJ5a4dnE2v1kMOrb2Le/+R4k+f5jCmPDE0gj+I0+yf2dMaeUdaPhId0x5mUwSvv2MVqYs1FykByGSLjF/jJfz2fzLoDe+u1su/gymf04n31azxTy4/rYcm8HXe/8fV1e9iMUkFEJGPKVayCCmPBFPTAY8DkAIU4rKFxeYp3oIcjV71oNRzx6px9NYuHH/lu63ESVKU6lZRI5cPxBDMyKv5v/UH/SIprsACIOdFNnBLbgNzfraCeMAyMNHZwM7VcLYIYgySdHKQDHYHCmfp9oVymPpE5ciXTs349nt4vt0Gczmq+ny+/g2uJ9OFvPre8OkbtYD9SfV9Pfx7zSNEvC7EQ57jw88YeQRpcosTcG0Ur9uXdAJRMsX/GtJ8rp9CFIIew7ZQZOp+QNuhtr6ktmv4NByR6HZA+oLm8hBaNCY04RYKV5/CJQBnoS/khlDOZgsnlHcvaC+OfjuAzHHEKR0z4qTVr6JZy9MOMh2HfzkDPIlr8kDRl9wMAdqv2DolcuG6RAolP/qYLBsM6k05Dod8QjNinlo1BxJkTBn5BwkZIAYGYHDFkWxZrT9CRk7o0rz06AXJlQp0nnqYvsvyB+0Dr0QgO+4DgJXsSQe5hBijhetDvK5n2OJK5mWnKH6e/ocUK3Z/qCVM/p0dUK/IwcvsDT5X+1zIrIoOFIdPrQ8albMglMo4NeE1ziz8FOQE7U4wMI7pA9CQW4GCKYBj4KQhg8s8ucwrfbQhMq9caDfMGXtVCvOpm5oFfgs5cC3TXe+o06fsmODxwHQXJg43UkasouJP5/+EUwWi+X1bD5eLZYBgNzXhYG1L8vxZBrcTZezxXUDDS6JNJgFofkxgfer8XL17e6yOAysbhxAPUx48ZikQne5Mne2pFyxyDV7CQReJtMeaSJvf4w7CVck3+whzJIwkxKCos6yPJbzJQNMoEvHEjJGFTFIjBawrWB0pCpIaJZiEAUSjEt18uJ28MjVb6ldy0oCnIjlRCwnApmK0pXmSUJ4SszxkAOTXEQe+Q08i2goMp2bXHNQS8k8pP4KJUvdLMv/R8lCw0eg7FTo/KRzrEGGWlgVCCUQz/X6k0tqBbk9/ZinUSPQQrCAY69lg6BFiNaVh2/1OVJpCmQ7+Mg20xAuZCdEVFeJlFJILLIUPPOFP6Ed2aHwS+mWQs/COrelzcDi9cVcKXMLasNBpKqCsQp6vYipUPIty0mVa8zAgqX89RkObgZVplqma+crloHQECpn06ziUkJOxYVznNczjifHMMtdUbef3NBEsV45vSRufbVZO/ca/PmdJhngse8749vx8qtT+qcjy0vXQNEC6N9jCSl0gzb0DMmrXW7NA9XXhs3n+TKdzyx45DSsZWtRd3gK+JuGrBGh9mOwfYF64VZC186sWJpFjj0Zu7szVnPNFkkjIB1VEV04ikK9YmZ3W/92aWmah/Ibj2wYZknp56p4VzFoKZRbmQZxWGNk7cx5rZ0lU0w+mTYJggEhqHvFhIllaqO0Cq0foIB5r+WR3P53AuZiFnY5IGX6KOQjOEIzGWMNBk6wkkH+j+3Idyr2znCek8wsxazWdbS7jcF5PuG1y3XGFcMSV7qLWtEWNosFb1ybinwElzlz0yJBShb3CMf4PRVH395pPZi49l7rZTqsB16D6a3RZcWR49/LC7Brm5SPdDSDX0Fqrw01ldnnZfKvMDsGKIB2H2tjg2wFV4AiIpElbFk7/2QvhsFMTXL4quHJPYeIzFmWJhhX4o87+AnbNcOkQMTBLx9rMM8BvIFmirG9IhSu3E/MVLnp5JOx6w1l28jS5fg36nE9h34YQm54AikB8PGan8fIASVH9KhGNNNChRT7kdHOXtDgSmX8BfeX9eW2XdXubs5mc3obj/L7sDUDYlTgi4BbApoJCVmRYGh0c8KNFbandaIGSm2Gj+zFT/IXCEswsoNmEg1sUFYtCYZmqW5HGxj3Jw8sfMR+pdw3Iq/l+FS0duCRgIOvoPlxy8VBM2TL792watuezsz7X8v2myX7muEi2oYF27yliWatLMpiV/gh6Tl8uxWwAi7Xa3d9wdkMb4SEum9fLFqKoTpH7Kq3rGwgsO8963dJlEnUX2VbhQ9mqSZFKLBnFmYYLe0m86yvrrkARHQ21Of251p12F/Vcb+BefXW5UMlbHjNnjhsSSP27P/crU0oGYRVgE8rLqSRyMC3gAOXFdgMEYMRKRB3R28AWQES+LoiXQO0FfAOBqfh5uyuEvfnrUN6vajIibjNxTvJIcnZ7DCOIkh5SPDTAE43xOtznCW165c5mTxzzDWq0YGZnGlptWJyj2LMpawZ5hXSvFbI0dazWulS8lKg6ELqu71eU+Cmmxt0AKzjoC/w+OFDRlQ3rrQQVvdj8cxZ67XfLfwFumF247Mn1Lxz9In794/8cMDTuOR0dGnXm2nXk+m7zDoeShtFGe3/gRdg9EjZrOUPnIjEku0pR7IAUwOkBHsISq6gO2nS/+3nq6urX996mO/9F+OJCos=')))
+
+          # Created by pyminifier (https://github.com/liftoff/pyminifier)
+
+          # LAMBDA-COORDINATOR-FAILOVER-END
+      Runtime: python3.6
+      Timeout: 60
+      ReservedConcurrentExecutions: 1
+      Environment:
+        Variables:
+          FAILOVER_INTERVAL_SECONDS: '3'
+          NEW_COORDINATOR_PROMOTION_GRACE_PERIOD_SECONDS: '60'
+          NEW_COORDINATOR_STARTUP_GRACE_PERIOD_SECONDS: '500'
+  CoordinatorFailoverIfNecessaryTriggerRule:
+    Type: 'AWS::Events::Rule'
+    DependsOn: CooordinatorDownAlarm
+    Properties:
+      ScheduleExpression: rate(1 minute)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt CoordinatorFailoverIfNecessary.Arn
+          Id: CoordinatorFailoverIfNecessaryLambda
+          Input: !Sub |
+            {
+              "cf_stack": "${AWS::StackName}",
+              "coordinator_eni_id": "${CoordinatorENI}",
+              "coordinators_group_name": "${Coordinators}",
+              "alarm_name": "${CooordinatorDownAlarm}"
+            }
+  PermissionForEventsToInvokeCoordinatorFailoverIfNecessaryLambda:
+    Type: 'AWS::Lambda::Permission'
+    Properties:
+      FunctionName:
+        Ref: CoordinatorFailoverIfNecessary
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt CoordinatorFailoverIfNecessaryTriggerRule.Arn
+  Metastore:
+    Type: 'AWS::EC2::Instance'
+    Condition: LaunchMetastore
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+        Count: 1
+    Properties:
+      InstanceType: m5.large
+      ImageId: !FindInMap 
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - id
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !If 
+        - CreateIamInstanceProfile
+        - !Ref PrestoClusterInstanceProfile
+        - !Ref IamInstanceProfile
+      SecurityGroupIds: !Split 
+        - ','
+        - !Join 
+          - ','
+          - - !GetAtt PrestoSecurityGroup.GroupId
+            - !Join 
+              - ','
+              - !Ref SecurityGroups
+      SubnetId: !Ref Subnet
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Metastore'
+        - Key: 'starburstdata:identification:role'
+          Value: 'presto:metastore'
+      UserData: !Base64 
+        'Fn::Sub':
+          - |-
+            {
+              "cft_configure": {
+                "coordinator": false
+                , "worker": false
+                , "start_presto": false
+                , "start_metastore": true
+                , "bootstrap_script_uri": "${BootstrapScriptURI}"
+                , "region": "${AWS::Region}"
+                , "log_group": "${PrestoLogGroup}"
+                , "cf_stack": "${AWS::StackName}"
+                , "cf_resource": "Metastore"
+                ${PrivateSubnetEndpoints}
+                ${StartMetastoreDb}
+                ${MetastoreJdbcUrl}
+                ${MetastoreJdbcUser}
+                ${MetastoreJdbcPassword}
+                ${S3}
+              }
+            }
+          - PrestoLogGroup: !Sub '/starburstdata/presto/${AWS::StackName}'
+            PrivateSubnetEndpoints: !If 
+              - CreateVPCEndpoints
+              - !Sub 
+                - |-
+                  , "api_proxy_endpoint_dns_entries": "${APIProxyDnsEntries}"
+                  , "aws_proxy_api_id": "${AWSProxyRestAPI}"
+                  , "aws_proxy_deployment": "${AWSProxyDeployment}"
+                  , "logs_endpoint_dns_entries": "${LogsDnsEntries}"
+                  , "monitoring_endpoint_dns_entries": "${MonitoringDnsEntries}"
+                - APIProxyDnsEntries: !Join 
+                    - ','
+                    - !GetAtt APIProxyEndpoint.DnsEntries
+                  LogsDnsEntries: !Join 
+                    - ','
+                    - !GetAtt LogsEndpoint.DnsEntries
+                  MonitoringDnsEntries: !Join 
+                    - ','
+                    - !GetAtt MonitoringEndpoint.DnsEntries
+              - ''
+            StartMetastoreDb: !If 
+              - LaunchMetastoreDb
+              - ', "start_metastore_db": true'
+              - ''
+            MetastoreJdbcUrl: !If 
+              - UseExternalMysqlMetastore
+              - !Sub 
+                - >-
+                  , "metastore_jdbc_url":
+                  "jdbc:mysql://${ExternalMetastoreHost}:${Port}/${ExternalRdbmsMetastoreDatabaseName}"
+                - Port: !If 
+                    - ExternalMetastorePortDefined
+                    - !Ref ExternalMetastorePort
+                    - '3306'
+              - !If 
+                - UseExternalPostgresMetastore
+                - !Sub 
+                  - >-
+                    , "metastore_jdbc_url":
+                    "jdbc:postgresql://${ExternalMetastoreHost}:${Port}/${ExternalRdbmsMetastoreDatabaseName}"
+                  - Port: !If 
+                      - ExternalMetastorePortDefined
+                      - !Ref ExternalMetastorePort
+                      - '5432'
+                - ''
+            MetastoreJdbcUser: !If 
+              - ExternalRdbmsMetastoreDefined
+              - !Sub ', "metastore_jdbc_user": "${ExternalRdbmsMetastoreUserName}"'
+              - ''
+            MetastoreJdbcPassword: !If 
+              - ExternalRdbmsMetastoreDefined
+              - !Sub ', "metastore_jdbc_password": "${ExternalRdbmsMetastorePassword}"'
+              - ''
+            S3: !If 
+              - S3EndpointDefined
+              - !Sub |
+                , "s3_endpoint": "${S3Endpoint}"
+                , "s3_access_key": "${S3AccessKey}"
+                , "s3_secret_key": "${S3SecretKey}"
+              - ''
+  Ranger:
+    Type: 'AWS::EC2::Instance'
+    Condition: LaunchRanger
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+        Count: 1
+    Properties:
+      InstanceType: m5.large
+      ImageId: !FindInMap 
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - id
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !If 
+        - CreateIamInstanceProfile
+        - !Ref PrestoClusterInstanceProfile
+        - !Ref IamInstanceProfile
+      SecurityGroupIds: !Split 
+        - ','
+        - !Join 
+          - ','
+          - - !GetAtt PrestoSecurityGroup.GroupId
+            - !Join 
+              - ','
+              - !Ref SecurityGroups
+      SubnetId: !Ref Subnet
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Ranger'
+        - Key: 'starburstdata:identification:role'
+          Value: 'presto:ranger'
+      UserData: !Base64 
+        'Fn::Sub':
+          - |-
+            {
+              "cft_configure": {
+                "start_ranger": true
+                , "coordinator": false
+                , "worker": false
+                , "start_presto": false
+                , "region": "${AWS::Region}"
+                , "log_group": "${PrestoLogGroup}"
+                , "cf_stack": "${AWS::StackName}"
+                , "cf_resource": "Ranger"
+                ${PrivateSubnetEndpoints}
+                ${RangerRdbms}
+                ${RangerUserSync}
+                , "RANGER__rangerAdmin_password": "${RangerAdminPassword}"
+                , "ranger_additional_config": "${RangerConfigFile}"
+                , "ranger_bootstrap_script": "${RangerBootstrapScript}"
+              }
+            }
+          - PrestoLogGroup: !Sub '/starburstdata/presto/${AWS::StackName}'
+            PrivateSubnetEndpoints: !If 
+              - CreateVPCEndpoints
+              - !Sub 
+                - |-
+                  , "api_proxy_endpoint_dns_entries": "${APIProxyDnsEntries}"
+                  , "aws_proxy_api_id": "${AWSProxyRestAPI}"
+                  , "aws_proxy_deployment": "${AWSProxyDeployment}"
+                  , "logs_endpoint_dns_entries": "${LogsDnsEntries}"
+                  , "monitoring_endpoint_dns_entries": "${MonitoringDnsEntries}"
+                - APIProxyDnsEntries: !Join 
+                    - ','
+                    - !GetAtt APIProxyEndpoint.DnsEntries
+                  LogsDnsEntries: !Join 
+                    - ','
+                    - !GetAtt LogsEndpoint.DnsEntries
+                  MonitoringDnsEntries: !Join 
+                    - ','
+                    - !GetAtt MonitoringEndpoint.DnsEntries
+              - ''
+            RangerRdbms: !If 
+              - UseExternalRdbmsRanger
+              - !Sub >
+                , "RANGER__db_host":
+                "${ExternalRdbmsRangerHost}:${ExternalRdbmsRangerPort}"
+
+                , "RANGER__db_name": "${ExternalRdbmsRangerDatabaseName}"
+
+                , "RANGER__db_root_user": "${ExternalRdbmsRangerUserName}"
+
+                , "RANGER__db_root_password": "${ExternalRdbmsRangerPassword}"
+              - |
+                , "start_ranger_db": true
+            RangerUserSync: !If 
+              - LaunchRangerUserSync
+              - !Sub |
+                , "start_ranger_usersync": true
+                , "ranger__config_file_url": "${RangerUserSyncConfigFile}"
+              - ''
+  Dashboard:
+    Type: 'AWS::CloudWatch::Dashboard'
+    Condition: EnableCloudWatchMetrics
+    Properties:
+      DashboardName: !Sub 'Starburst-Dashboard-${AWS::StackName}'
+      DashboardBody: !Sub 
+        - |-
+          {
+              "widgets": [
+                  {
+                      "type": "metric",
+                      "x": 0,
+                      "y": 6,
+                      "width": 9,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ "Presto", "cpu_usage_softirq", "PrestoStackName", "${AWS::StackName}", "Type", "Node", "Category", "cpu", "PrestoNodeRole", "coordinator", { "label": "softirq", "period": 10, "color": "#9467bd" } ],
+                              [ ".", "cpu_usage_iowait", ".", ".", ".", ".", ".", ".", ".", ".", { "label": "iowait", "period": 10, "color": "#ff7f0e" } ],
+                              [ ".", "cpu_usage_system", ".", ".", ".", ".", ".", ".", ".", ".", { "label": "system", "period": 10, "color": "#d62728" } ],
+                              [ ".", "cpu_usage_user", ".", ".", ".", ".", ".", ".", ".", ".", { "label": "user", "period": 10, "color": "#2ca02c" } ],
+                              [ ".", "cpu_usage_idle", ".", ".", ".", ".", ".", ".", ".", ".", { "label": "idle", "period": 10, "color": "#1f77b4" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": true,
+                          "title": "Coordinator CPU",
+                          "region": "${AWS::Region}",
+                          "period": 300
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 0,
+                      "y": 12,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ "Presto", "HeapMemoryUsage_used", "PrestoStackName", "${AWS::StackName}", "Type", "Presto", "Category", "memory", "PrestoNodeRole", "coordinator", { "label": "used", "period": 10, "color": "#d62728" } ],
+                              [ ".", "HeapMemoryUsage_committed", ".", ".", ".", ".", ".", ".", ".", ".", { "label": "allocated", "period": 10 } ],
+                              [ ".", "HeapMemoryUsage_max", ".", ".", ".", ".", ".", ".", ".", ".", { "label": "max", "period": 10 } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "title": "Coordinator heap memory",
+                          "region": "${AWS::Region}",
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Bytes"
+                              }
+                          },
+                          "legend": {
+                              "position": "bottom"
+                          },
+                          "period": 300
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 9,
+                      "y": 6,
+                      "width": 9,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "recv/PERIOD(recv)", "label": "received", "id": "e1", "period": 10 } ],
+                              [ { "expression": "sent/PERIOD(sent)", "label": "sent", "id": "e2", "period": 10 } ],
+                              [ "Presto", "net_bytes_recv", "PrestoStackName", "${AWS::StackName}", "Type", "Node", "Category", "net", "PrestoNodeRole", "coordinator", { "period": 10, "stat": "Sum", "id": "recv", "visible": false } ],
+                              [ ".", "net_bytes_sent", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "sent", "visible": false, "stat": "Sum" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "title": "Coordinator network",
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "yAxis": {
+                            "left": {
+                              "label": "Bytes/s"
+                            }
+                          }
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 18,
+                      "y": 6,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "read/PERIOD(read)", "label": "read", "id": "e1", "period": 10 } ],
+                              [ { "expression": "write/PERIOD(write)", "label": "written", "id": "e2", "period": 10 } ],
+                              [ "Presto", "diskio_read_bytes", "PrestoStackName", "${AWS::StackName}", "Type", "Node", "Category", "diskio", "PrestoNodeRole", "coordinator", { "period": 10, "id": "read", "visible": false, "stat": "Sum" } ],
+                              [ ".", "diskio_write_bytes", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "write", "visible": false, "stat": "Sum" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "title": "Coordinator disk IO",
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "yAxis": {
+                            "left": {
+                              "label": "Bytes/s"
+                            }
+                          }
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 12,
+                      "y": 12,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "RATE(young / 1000) * 100", "label": "young gen", "id": "e1", "period": 10, "color": "#2ca02c" } ],
+                              [ { "expression": "RATE(old / 1000) * 100", "label": "old gen", "id": "e2", "period": 10, "color": "#d62728" } ],
+                              [ "Presto", "gc_young_CollectionTime", "PrestoStackName", "${AWS::StackName}", "Type", "Presto", "Category", "memory", "PrestoNodeRole", "coordinator", { "period": 10, "id": "young", "visible": false, "stat": "Maximum" } ],
+                              [ ".", "gc_old_CollectionTime", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "old", "visible": false, "stat": "Maximum" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Time (%)",
+                                  "min": 0
+                              }
+                          },
+                          "title": "Coordinator G1 collection time",
+                          "period": 300
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 0,
+                      "y": 0,
+                      "width": 18,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ "Presto", "RunningQueries", "PrestoStackName", "${AWS::StackName}", "Type", "Presto", "Category", "executor", "PrestoNodeRole", "coordinator", { "period": 10, "label": "running queries" } ],
+                              [ ".", "QueuedQueries", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "label": "queued queries" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Queries",
+                          "period": 300
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 6,
+                      "y": 12,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ "Presto", "NonHeapMemoryUsage_used", "PrestoStackName", "${AWS::StackName}", "Type", "Presto", "Category", "memory", "PrestoNodeRole", "coordinator", { "label": "used", "color": "#d62728", "period": 10, "id": "m1" } ],
+                              [ ".", "NonHeapMemoryUsage_committed", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "label": "allocated" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Bytes"
+                              }
+                          },
+                          "title": "Coordinator non-heap memory",
+                          "period": 300
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 18,
+                      "y": 12,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ "Presto", "mem_used", "PrestoStackName", "${AWS::StackName}", "Type", "Node", "Category", "memory", "PrestoNodeRole", "coordinator", { "period": 10, "label": "used", "color": "#d62728" } ],
+                              [ ".", "mem_cached", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "label": "cached" } ],
+                              [ ".", "mem_free", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "label": "free" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": true,
+                          "title": "Coordinator OS memory",
+                          "region": "${AWS::Region}",
+                          "period": 300
+                      }
+                  },
+                  {
+                      "type": "text",
+                      "x": 18,
+                      "y": 0,
+                      "width": 6,
+                      "height": 3,
+                      "properties": {
+                          "markdown": "\n&nbsp;\n\n[button:Starburst cluster overview](${CoordinatorURL}/ui/)\n\n[button:CloudWatch Logs](https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#logStream:group=/starburstdata/presto/${AWS::StackName})\n"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 0,
+                      "y": 18,
+                      "width": 9,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "softirq/PERIOD(softirq)*10", "period": 10, "label": "softirq", "id": "e3", "color": "#9467bd" } ],
+                              [ { "expression": "iowait/PERIOD(iowait)*10", "period": 10, "label": "iowait", "id": "e1" } ],
+                              [ { "expression": "system/PERIOD(system)*10", "period": 10, "label": "system", "id": "e2", "color": "#d62728" } ],
+                              [ { "expression": "user/PERIOD(user)*10", "period": 10, "label": "user", "id": "e5", "color": "#2ca02c" } ],
+                              [ { "expression": "idle/PERIOD(idle)*10", "period": 10, "label": "idle", "id": "e4", "color": "#1f77b4" } ],
+                              [ "Presto", "cpu_usage_iowait", "PrestoStackName", "${AWS::StackName}", "Type", "Node", "Category", "cpu", "PrestoNodeRole", "worker", { "period": 10, "stat": "Sum", "id": "iowait", "visible": false } ],
+                              [ ".", "cpu_usage_system", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "stat": "Sum", "id": "system", "visible": false } ],
+                              [ ".", "cpu_usage_softirq", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "stat": "Sum", "id": "softirq", "visible": false } ],
+                              [ ".", "cpu_usage_idle", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "stat": "Sum", "id": "idle", "visible": false } ],
+                              [ ".", "cpu_usage_user", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "stat": "Sum", "id": "user", "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": true,
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "title": "Workers CPU",
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Percent"
+                              }
+                          }
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 9,
+                      "y": 18,
+                      "width": 9,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "recv/PERIOD(recv)", "label": "received", "id": "e1", "period": 10 } ],
+                              [ { "expression": "sent/PERIOD(sent)", "label": "sent", "id": "e2", "period": 10 } ],
+                              [ "Presto", "net_bytes_sent", "PrestoStackName", "${AWS::StackName}", "Type", "Node", "Category", "net", "PrestoNodeRole", "worker", { "id": "sent", "period": 10, "visible": false, "stat": "Sum" } ],
+                              [ ".", "net_bytes_recv", ".", ".", ".", ".", ".", ".", ".", ".", { "id": "recv", "period": 10, "visible": false, "stat": "Sum" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "title": "Workers network",
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Bytes/s"
+                              }
+                          }
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 18,
+                      "y": 18,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "read/PERIOD(read)", "label": "read", "id": "e1", "period": 10 } ],
+                              [ { "expression": "write/PERIOD(write)", "label": "written", "id": "e2", "period": 10 } ],
+                              [ "Presto", "diskio_write_bytes", "PrestoStackName", "${AWS::StackName}", "Type", "Node", "Category", "diskio", "PrestoNodeRole", "worker", { "period": 10, "id": "write", "visible": false, "stat": "Sum" } ],
+                              [ ".", "diskio_read_bytes", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "read", "visible": false, "stat": "Sum" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "title": "Workers disk IO",
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Bytes/s"
+                              }
+                          }
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 0,
+                      "y": 24,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "used/PERIOD(used)*10", "label": "used", "id": "e1", "period": 10, "color": "#d62728" } ],
+                              [ { "expression": "committed/PERIOD(committed)*10", "label": "allocated", "id": "e2", "period": 10 } ],
+                              [ { "expression": "max/PERIOD(max)*10", "label": "max", "id": "e3", "period": 10 } ],
+                              [ "Presto", "HeapMemoryUsage_used", "PrestoStackName", "${AWS::StackName}", "Type", "Presto", "Category", "memory", "PrestoNodeRole", "worker", { "period": 10, "id": "used", "visible": false, "stat": "Sum" } ],
+                              [ ".", "HeapMemoryUsage_committed", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "committed", "visible": false, "stat": "Sum" } ],
+                              [ ".", "HeapMemoryUsage_max", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "max", "visible": false, "stat": "Sum" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "title": "Workers heap memory",
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Bytes"
+                              }
+                          }
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 6,
+                      "y": 24,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "used/PERIOD(used)*10", "label": "used", "id": "e1", "period": 10, "color": "#d62728" } ],
+                              [ { "expression": "committed/PERIOD(committed)*10", "label": "allocated", "id": "e2", "period": 10 } ],
+                              [ "Presto", "NonHeapMemoryUsage_used", "PrestoStackName", "${AWS::StackName}", "Type", "Presto", "Category", "memory", "PrestoNodeRole", "worker", { "stat": "Sum", "period": 10, "id": "used", "visible": false } ],
+                              [ ".", "NonHeapMemoryUsage_committed", ".", ".", ".", ".", ".", ".", ".", ".", { "stat": "Sum", "period": 10, "id": "committed", "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "title": "Workers non-heap memory",
+                          "region": "${AWS::Region}",
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Bytes"
+                              }
+                          },
+                          "period": 300
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 12,
+                      "y": 24,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "RATE(young / 1000) * 100", "label": "young gen", "id": "e1", "period": 10, "color": "#2ca02c" } ],
+                              [ { "expression": "RATE(old / 1000) * 100", "label": "old gen", "id": "e2", "period": 10, "color": "#d62728" } ],
+                              [ "Presto", "gc_young_CollectionTime", "PrestoStackName", "${AWS::StackName}", "Type", "Presto", "Category", "memory", "PrestoNodeRole", "worker", { "period": 10, "id": "young", "visible": false, "stat": "Maximum" } ],
+                              [ ".", "gc_old_CollectionTime", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "old", "visible": false, "stat": "Maximum" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "title": "Workers G1 collection time",
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Time (%)",
+                                  "min": 0
+                              }
+                          }
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 18,
+                      "y": 24,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "used/PERIOD(used)*10", "label": "used", "id": "e1", "period": 10, "color": "#d62728" } ],
+                              [ { "expression": "cached/PERIOD(cached)*10", "label": "cached", "id": "e3", "period": 10 } ],
+                              [ { "expression": "free/PERIOD(free)*10", "label": "free", "id": "e2", "period": 10 } ],
+                              [ "Presto", "mem_used", "PrestoStackName", "${AWS::StackName}", "Type", "Node", "Category", "memory", "PrestoNodeRole", "worker", { "period": 10, "id": "used", "stat": "Sum", "visible": false } ],
+                              [ ".", "mem_free", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "free", "stat": "Sum", "visible": false } ],
+                              [ ".", "mem_cached", ".", ".", ".", ".", ".", ".", ".", ".", { "period": 10, "id": "cached", "stat": "Sum", "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": true,
+                          "title": "Worker OS memory",
+                          "region": "${AWS::Region}",
+                          "period": 300,
+                          "yAxis": {
+                              "left": {
+                                  "showUnits": false,
+                                  "label": "Bytes"
+                              }
+                          }
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 18,
+                      "y": 3,
+                      "width": 6,
+                      "height": 3,
+                      "properties": {
+                          "title": "HA heartbeat monitor",
+                          "annotations": {
+                              "alarms": [
+                                  "${CooordinatorDownAlarm.Arn}"
+                              ]
+                          },
+                          "view": "timeSeries",
+                          "stacked": true
+                      }
+                  }
+              ]
+          }
+        - CoordinatorURL: !Sub 'http://${CoordinatorENI.PrimaryPrivateIpAddress}:${PrestoHttpPort}'
+  Superset:
+    Type: 'AWS::EC2::Instance'
+    Condition: LaunchSuperset
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT20M
+        Count: 1
+    Properties:
+      InstanceType: m5.large
+      ImageId: !FindInMap 
+        - RegionMap
+        - !Ref 'AWS::Region'
+        - id
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !If 
+        - CreateIamInstanceProfile
+        - !Ref PrestoClusterInstanceProfile
+        - !Ref IamInstanceProfile
+      SecurityGroupIds: !Split 
+        - ','
+        - !Join 
+          - ','
+          - - !GetAtt PrestoSecurityGroup.GroupId
+            - !Join 
+              - ','
+              - !Ref SecurityGroups
+      SubnetId: !Ref Subnet
+      Tags:
+        - Key: Name
+          Value: !Sub '${AWS::StackName}-Superset'
+        - Key: 'starburstdata:identification:role'
+          Value: 'presto:superset'
+      UserData: !Base64 
+        'Fn::Sub':
+          - |-
+            {
+              "cft_configure": {
+                "coordinator": false
+                , "worker": false
+                , "start_presto": false
+                , "coordinator_address": "${CoordinatorENI.PrimaryPrivateIpAddress}"
+                , "presto_http_port": ${PrestoHttpPort}
+                , "start_superset": true
+                , "bootstrap_script_uri": "${BootstrapScriptURI}"
+                , "region": "${AWS::Region}"
+                , "log_group": "${PrestoLogGroup}"
+                , "cf_stack": "${AWS::StackName}"
+                , "cf_resource": "Superset"
+                ${PrivateSubnetEndpoints}
+                , "force_superset_update_when_coordinator_configuration_is_updated": {
+                    "additional_configuration_uri": "${AdditionalCoordinatorConfigurationURI}"
+                    ${HiveMetastore}
+                }
+              }
+            }
+          - PrestoLogGroup: !Sub '/starburstdata/presto/${AWS::StackName}'
+            PrivateSubnetEndpoints: !If 
+              - CreateVPCEndpoints
+              - !Sub 
+                - |-
+                  , "api_proxy_endpoint_dns_entries": "${APIProxyDnsEntries}"
+                  , "aws_proxy_api_id": "${AWSProxyRestAPI}"
+                  , "aws_proxy_deployment": "${AWSProxyDeployment}"
+                  , "logs_endpoint_dns_entries": "${LogsDnsEntries}"
+                  , "monitoring_endpoint_dns_entries": "${MonitoringDnsEntries}"
+                - APIProxyDnsEntries: !Join 
+                    - ','
+                    - !GetAtt APIProxyEndpoint.DnsEntries
+                  LogsDnsEntries: !Join 
+                    - ','
+                    - !GetAtt LogsEndpoint.DnsEntries
+                  MonitoringDnsEntries: !Join 
+                    - ','
+                    - !GetAtt MonitoringEndpoint.DnsEntries
+              - ''
+            HiveMetastore: !If 
+              - LaunchMetastore
+              - !Sub |
+                , "hive_metastore_uri": "thrift://${Metastore.PrivateIp}:9083"
+              - !If 
+                - UseExternalHiveMetastore
+                - !Sub 
+                  - >-
+                    , "hive_metastore_uri":
+                    "thrift://${ExternalMetastoreHost}:${Port}"
+                  - Port: !If 
+                      - ExternalMetastorePortDefined
+                      - !Ref ExternalMetastorePort
+                      - '9083'
+                - !If 
+                  - UseGlueMetastore
+                  - ', "hive_use_glue_metastore": true'
+                  - ''
+Outputs:
+  PrestoCoordinatorURL:
+    Value: !Sub 'http://${CoordinatorENI.PrimaryPrivateIpAddress}:${PrestoHttpPort}'
+    Description: 'Presto Web UI, Coordinator REST Endpoint'
+  PrestoSSH:
+    Value: !Sub 'ec2-user@${CoordinatorENI.PrimaryPrivateIpAddress}'
+    Description: SSH Access
+  PublicSupersetURL:
+    Condition: LaunchSupersetAndSelectedSubnetAutoAssignsPublicIp
+    Value: !Sub 'http://${Superset.PublicDnsName}:8088'
+    Description: Apache Superset app (public address)
+  PrivateSupersetURL:
+    Condition: LaunchSuperset
+    Value: !Sub 'http://${Superset.PrivateDnsName}:8088'
+    Description: Apache Superset app (private address)
+  SupersetAdminPassword:
+    Condition: LaunchSuperset
+    Value: !Ref Superset
+    Description: Password for 'admin' user in Apache Superset app
+  PublicRangerUrl:
+    Condition: LaunchRangerAndSelectedSubnetAutoAssignsPublicIp
+    Value: !Sub 'http:///${Ranger.PublicDnsName}:6080'
+    Description: Apache Ranger app (public address)
+  PrivateRangerUrl:
+    Condition: LaunchRanger
+    Value: !Sub 'http:///${Ranger.PrivateDnsName}:6080'
+    Description: Apache Ranger app (private address)
+  CloudWatchLogs:
+    Value: !Sub >-
+      https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#logStream:group=/starburstdata/presto/${AWS::StackName}
+  Dashboard:
+    Condition: EnableCloudWatchMetrics
+    Value: !Sub >-
+      https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=Starburst-Dashboard-${AWS::StackName}
