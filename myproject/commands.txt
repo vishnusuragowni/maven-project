@@ -1,0 +1,107 @@
+aws dms create-endpoint --endpoint-identifier env-en411-nams-redshift-targetendpoint-test2 --endpoint-type target --engine-name redshift --username awsedpuser --password 123456789 --server-name redshift-edp-dev.czvsewxs0afi.us-east-1.redshift.amazonaws.com --port 5617 --database-name edpdev --redshift-settings '{"ServiceAccessRoleArn":"arn:aws:kms:us-east-1:288355943657:key/b5823528-2d86-4cba-9196-de1de9fd6d9f", "BucketName": "2env-en411-cloudformation-s3", "BucketFolder": "NAMSTEST","EncryptionMode": "SSE_KMS", "ServerSideEncryptionKmsKeyId": "arn:aws:kms:us-east-1:288355943657:key/b5823528-2d86-4cba-9196-de1de9fd6d9f"}'
+
+
+--redshift-settings '{"EncryptionMode": "SSE_KMS", 
+"ServerSideEncryptionKmsKeyId": "arn:aws:kms:us-east-1:944454115380:key/24c3c5a1-f34a-4519-a85b-2debbef226d1"}'
+
+
+aws dms create-endpoint --endpoint-identifier env-en411-nams-redshift-targetendpoint-test2 --endpoint-type target --engine-name redshift --username awsedpuser --password 123456789 --server-name redshift-edp-dev.czvsewxs0afi.us-east-1.redshift.amazonaws.com --port 5617 --database-name edpdev --redshift-settings file://C:\Users\SVS0RMR\nams-redshift.json
+
+
+aws dms import-certificate --certificate-identifier en411-nams-aws-cli-import --certificate-wallet C:\Users\SVS0RMR\03-26-2020\js-cwallet4.sso
+
+aws dms import-certificate --certificate-identifier en411-test-certificate-pem --certificate-pem self-rootCA.pem --certificate-wallet C:\Users\SVS0RMR\03-26-2020
+
+
+aws dms create-endpoint --endpoint-identifier epv-en411-nenamsp-redshift-targetendpoint --endpoint-type target --engine-name redshift --username zzz0talend --password 123456789 --server-name enterpriseprod-en411-edp-redshiftcluster.c0ln9ah74kz4.us-east-1.redshift.amazonaws.com --port 5610 --database-name edp --kms-key-id arn:aws:kms:us-east-1:434940588922:key/87fc888f-e181-403a-bfdc-d4d9a7231691 --redshift-settings file://C:\Users\SVS0RMR\nams-redshift.json
+
+{
+    "Endpoint": {
+        "EndpointIdentifier": "env-en411-nams-redshift-targetendpoint-test10",
+        "EndpointType": "TARGET",
+        "EngineName": "redshift",
+        "EngineDisplayName": "Amazon Redshift",
+        "Username": "awsedpuser",
+        "ServerName": "redshift-edp-dev.czvsewxs0afi.us-east-1.redshift.amazonaws.com",
+        "Port": 5617,
+        "DatabaseName": "edpdev",
+        "Status": "active",
+        "KmsKeyId": "arn:aws:kms:us-east-1:288355943657:key/b5823528-2d86-4cba-9196-de1de9fd6d9f",
+        "EndpointArn": "arn:aws:dms:us-east-1:288355943657:endpoint:C5FJX7KLHAXCTIGE7TJR2KZ2CI",
+        "SslMode": "none",
+        "RedshiftSettings": {
+            "BucketFolder": "NAMSTEST",
+            "BucketName": "2env-en411-cloudformation-s3",
+            "DatabaseName": "edpdev",
+            "EncryptionMode": "SSE_KMS",
+            "Port": 5617,
+            "ServerName": "redshift-edp-dev.czvsewxs0afi.us-east-1.redshift.amazonaws.com",
+            "ServiceAccessRoleArn": "arn:aws:iam::288355943657:role/dms-access-for-endpoint",
+            "ServerSideEncryptionKmsKeyId": "arn:aws:kms:us-east-1:288355943657:key/b5823528-2d86-4cba-9196-de1de9fd6d9f",
+            "Username": "awsedpuser"
+        }
+    }
+}
+
+
+
+
+aws iam tag-role --role-name NEE-EN411-NUC-AllDept-RedShift-Assume-Role --tags "Key"="AppCode","Value"="EN411" "Key"="Environment","Value"="PROD" "Key"="DataClassification","Value"="NO PII" "Key"="ITArea","Value"="NELSON CASTELLANOS-305-552-3533-NXC0GLT" "Key"="SupportContact","Value"="NELSON CASTELLANOS-305-552-3533-NXC0GLT" "Key"="SupportGroup","Value"="IT-EDP-PLATFORM" "Key"="IamRoleName","Value"="2EPV-EN411-AllDept-RedShift-AssumeRole" "Key"="IamRoleBU","Value"="Power Delivery" "Key"="Purpose","Value"="dataengineer base for power delivery ssup persona" "Key"="CloudformationStackName","Value"="admin" "Key"="UserContact","Value"=" Anil/Mohsin pipe305-552-3533 pipeNXC0GLT -Pending" "Key"="ADGroup","Value"="AWS-EnterpriseNonProd-en411-pd-ssup-dataengineer-base" "Key"="PolicyAttached1","Value"="2EPV-EN411-AllDept-RedShift-Policy" "Key"="PolicyAttached2","Value"="NotApplicable" "Key"="PolicyAttached3","Value"="NotApplicable" "Key"="PolicyAttached4","Value"="NotApplicable" "Key"="PolicyAttached5","Value"="NotApplicable" "Key"="PolicyAttached6","Value"="NotApplicable" "Key"="PolicyAttached7","Value"="NotApplicable" "Key"="PolicyAttached8","Value"="NotApplicable" "Key"="PolicyAttached9","Value"="NotApplicable" "Key"="PolicyAttached10","Value"="NotApplicable"
+
+
+aws iam get-role --role-name 2EQV-EN411-Lambda-Execution-Role role
+
+aws dms import-certificate --certificate-identifier en411-test-certificate --certificate-pem CSPREFPT_cwallet.sso --certificate-wallet file://C:\Users\SVS0RMR\
+
+ec2-en411-generaluse-cf-ec2DataCollector1-1GFUBZ3F30NNZ
+
+sudo mkdir /data
+sudo mount /dev/xvdf /data
+or 
+sudo mount /dev/xvdf1 /data
+#lsblk
+
+nslookup 2env-gc-en41102
+
+SslMode: !If ["HasDMSCertCode", "verify-ca", "none"]
+      CertificateArn: !If ["HasDMSCertCode", !Sub "arn:aws:dms:${AWS::Region}:${AWS::AccountId}:cert:${DbSourceDMSCertCode}", !Ref "AWS::NoValue"]
+
+
+
+[May 29, 2020, 1:38 PM] Doe, Eli: 6946713021
+[May 29, 2020, 1:38 PM] Doe, Eli: 2020-04-10T18:23:19 [TARGET_APPLY    ]I:  Error_State: During startup error state is set to '1' and expiration time is already set.
+[May 29, 2020, 1:38 PM] Doe, Eli: 2020-04-17T00:52:25 [SOURCE_UNLOAD   ]E:  ORA-12592: TNS:bad packet  [1022305]  (oracle_endpoint_unload.c:226)
+[May 29, 2020, 2:09 PM] Doe, Eli: {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "dms:*"
+            ],
+            "Effect": "Deny",
+            "Resource": "arn:aws:dms:us-east-1:152683116:endpoint:D6E37YBXTNHOA6XRQSZCUGX"
+        }
+    ]
+}  
+[May 29, 2020, 2:10 PM] Doe, Eli: {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Action": [
+                "dms:*"
+            ],
+            "Effect": "Deny",
+            "Resource": "arn:aws:dms:us-east-1:152683116:task:UO3YR4N47DXH3ATT4YMWOIT"
+        }
+    ]
+}      
+[May 29, 2020, 2:10 PM] Doe, Eli: Security in AWS Database Migration Service - AWS Database Migration Servicedocs.aws.amazon.comProvides an introduction to AWS Database Migration Service security.https://docs.aws.amazon.com/dms/latest/userguide/CHAP_Security.html#CHAP_Security.IAMPermissions
+[May 29, 2020, 2:13 PM] Doe, Eli: Security in AWS Database Migration Service - AWS Database Migration Servicedocs.aws.amazon.comProvides an introduction to AWS Database Migration Service security.https://docs.aws.amazon.com/dms/latest/userguide/CHAP_Security.html#CHAP_Security.FineGrainedAccess
+[May 29, 2020, 2:23 PM] Russo, Michael: Actions, Resources, and Condition Keys for      AWS Database Migration Service - AWS Identity and Access Managementdocs.aws.amazon.comLists all of the available service-specific resources, actions, and condition keys that can be used in IAM policies to control access to AWS Database Migration Service.https://docs.aws.amazon.com/IAM/latest/UserGuide/list_awsdatabasemigrationservice.html
+
+
+aws dms describe-replication-instances --filters "Name"="engine-version","Values"="3.1.4"
+
+curl "http://169.254.169.254/latest/user-data" | jq ".cft_configure" 
+
+-password=$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 32)
