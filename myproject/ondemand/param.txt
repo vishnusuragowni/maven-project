@@ -1,2 +1,0 @@
-var1 = 'hi'
-var2 = 'how are you?'
